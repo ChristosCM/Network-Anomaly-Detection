@@ -139,13 +139,106 @@ def proto(data):
 
 def states(data):
     
+    req = [0,0, "REQ"]
+    rst = [0,0, "RST"]
+    eco = [0,0, "ECO"]
+    clo = [0,0, "CLO"]
+    urh = [0,0, "URH"]
+    acc = [0,0, "ACC"]
+    par = [0,0, "PAR"]
+    tst = [0,0, "TST"]
+    ecr = [0,0, "ECR"]
+    no = [0,0, "no"]
+    urn = [0,0, "URN"]
+    mas = [0,0, "MAS"]
+    txd = [0,0,"TXD"]
+    for _, row in data.iterrows():
+        if row.state=="REQ":
+            if row.Label==0:
+                req[0] += 1
+            else:
+                req[1] += 1
+        if row.state=="RST":
+            if row.Label==0:
+                rst[0] += 1
+            else:
+                rst[1] += 1
+        if row.state=="ECO":
+            if row.Label==0:
+                eco[0] += 1
+            else:
+                eco[1] += 1
+        if row.state=="CLO":
+            if row.Label==0:
+                clo[0] += 1
+            else:
+                clo[1] += 1
+        if row.state=="URH":
+            if row.Label==0:
+                urh[0] += 1
+            else:
+                urh[1] += 1
+        if row.state=="ACC":
+            if row.Label==0:
+                acc[0] += 1
+            else:
+                acc[1] += 1
+        if row.state=="PAR":
+            if row.Label==0:
+                par[0] += 1
+            else:
+                par[1] += 1
+        if row.state=="TST":
+            if row.Label==0:
+                tst[0] += 1
+            else:
+                tst[1] += 1
+        if row.state=="ECR":
+            if row.Label==0:
+                ecr[0] += 1
+            else:
+                ecr[1] += 1
+        if row.state=="no":
+            if row.Label==0:
+                no[0] += 1
+            else:
+                no[1] += 1
+        if row.state=="URN":
+            if row.Label==0:
+                urn[0] += 1
+            else:
+                urn[1] += 1
+        if row.state=="MAS":
+            if row.Label==0:
+                mas[0] += 1
+            else:
+                mas[1] += 1
+        if row.state=="TXD":
+            if row.Label==0:
+                txd[0] += 1
+            else:
+                txd[1] += 1
+    final = [req,rst,eco,clo,urh,acc,par,tst,ecr,no,urn,mas,txd]   
+    for i in range (len(final)):
+        if final[i][1]==0:
+            final[i].append("Can be excluded")
+        else:
+            final[i].append("Cannot be excluded")
+    with open("states.txt","w+") as f: 
+        f.write("Normal|Abnormal|State\n")
+        for state in final:
+            state[0] = str(state[0])
+            state[1] = str(state[1])
+            f.write("|".join(state)+"\n")
 
-    general = data.shape[0] 
-    main = 0
-    for i in data.state:
-        if i=="FIN" or i == "CON" or i == "INT":
-            main += 1
-    print ("The percentage of the 3 main classes over all the data is {}%".format((main/general)*100))
+    # general = data.shape[0] 
+    # main = 0
+    # for i in data.state:
+    #     if i=="FIN" or i == "CON" or i == "INT":
+    #         main += 1
+    # print ("The percentage of the 3 main classes over all the data is {}%".format((main/general)*100))
+
+
 
     #Code to produce the bar plot for the states
     
@@ -238,10 +331,8 @@ def plotTime(data):
 
 def main():
     labels =  read_features().Name
-    data = read_clean_data(clean,17000)
-    for i in data.Stime:
-        if isinstance(i,str):
-            print (i)
+    data = read_clean_data(clean,1000000)
+    states(data)
     #plotTime(data)
     #applyTSNE(data)
     #services(data)
