@@ -1,0 +1,260 @@
+import pandas as pd #0.24.2
+from pandas.plotting import scatter_matrix
+import numpy as np 
+import matplotlib.pyplot as plt
+from sklearn.datasets import fetch_openml
+from sklearn.manifold import TSNE
+from category_encoders import *
+from loo_encoder.encoder import LeaveOneOutEncoder
+import seaborn as sns
+import time
+import hypertools as hyp
+from matplotlib.animation import FuncAnimation
+
+
+def read_features():
+    input_file = "featuresCat.csv"
+    featuresTable = pd.read_csv(input_file,encoding = "ISO-8859-1",names = ['No.','Name', 'Type', 'Description'])
+    #print (featuresTable)
+    #values = pd.DataFrame(featuresTable.Type.value_counts())
+    # count_nominal = 0;
+    # for feature in featuresTable.Type:
+    #     if feature == "nominal":
+    #         count_nominal += 1
+    # print ("The number of nominal features is: {}".format(count_nominal))
+
+
+    # _ = plt.bar(values, height = 10)
+    # plt.title("Histogram of Feature Type")
+    # plt.show()
+    return featuresTable
+def read_clean_data(data,rows):
+    feat = read_features()
+    stime = time.time()
+    #may need to add chunksize here to make this more efficient when testing
+    if rows == 0:
+        cleanData = pd.read_csv(data, names = feat.Name)
+        print("It took {} to read the data".format((time.time()-stime)))
+
+    else:
+        cleanData = pd.read_csv(data, names = feat.Name, nrows = rows)
+        print("It took {} to read {} rows from the data".format((time.time()-stime),rows))
+
+    cleanData =  (cleanData.reset_index().drop([0],axis=0))
+    return cleanData
+    #ip = pd.DataFrame(cleanData.srcip.value_counts())
+
+    # normal = 0
+    # abnormal = 0
+    # for point in cleanData.attack_cat: 
+    #     if point == "Normal":
+    #         normal +=1
+    #     else:
+    #         abnormal += 1
+    # clean = "imbalanced/clean_data_2.csv"
+    # cleanData = pd.read_csv(clean, names = feat.Name)
+   
+    # print ("Normal:{}, Abnormal:{}, Normal Percentage: {}".format(normal,abnormal, (normal/(normal+abnormal))*100))
+
+def applyTSNE(data):
+    stime = time.time()
+    tsne = TSNE(n_components=2, verbose=1, perplexity=40, n_iter=300)
+    tsne_results = tsne.fit_transform(data)
+    print('t-SNE done! Time elapsed: {} seconds'.format(time.time()-stime))
+
+#function to combine the 3 datasets into 1 main dataset
+def combine_datasets(data1, data2, data3):
+    #read the files
+    d1 = pd.read_csv(data1)
+    d2 = pd.read_csv(data2)
+    d3 = pd.read_csv(data3)
+    #drop the description from the pd 
+    d1 = d1.drop([0],axis=0)
+    d2 = d2.drop([0],axis=0)
+    d3 = d3.drop([0],axis=0)
+    #combine the 3 sets into one
+    dataset = pd.concat([d1,d2,d3])
+    dataset.to_csv("imbalanced/all_clean_data.csv")
+#combine_datasets("imbalanced/clean_data_1.csv","imbalanced/clean_data_2.csv","imbalanced/clean_data_3.csv")
+#read_clean_data("imbalanced/clean_data_1.csv")
+# data = read_clean_data("imbalanced/clean_data_1.csv")
+# applyTSNE(data)
+
+#function to get and plot the number of attacks in each different attack category
+def services(data):
+
+    general = data.shape[0] 
+    main = 0
+    otherper = 0
+    second = 0
+    for i in data.service:
+        if i=="other":
+            otherper += 1
+        if i=="other" or i == "dns" or i=="http" or i=="ftp-data"or i=="smtp"or i=="ftp"or i=="ssh":
+            main += 1
+        if i=="dns" or i=="other":
+            second +=1
+    print ("The percentage of the other class over all the data is {}%".format((otherper/general)*100))
+    print ("The percentage of the 7 main classes over all the data is {}%".format((main/general)*100))
+    print ("The percentage of the 2 classes over all the data is {}%".format((second/general)*100))
+
+    #Following is the code to build the bar plot
+    # serveLabel = []
+    # serveCount = []
+    # endrange = ((pd.DataFrame(data.service.value_counts())).shape[0])+1
+    # generalCount= data.service.value_counts()
+    # for i in range (1,endrange):
+    #     serveLabel.append((str(generalCount[i-1:i]).split())[0])
+    #     serveCount.append((str(generalCount[i-1:i]).split()[1]))
+
+    # plt.bar(serveLabel,[int(x) for x in serveCount], label = 'Data Point Count')
+    # plt.ylabel('Service Count')
+    # plt.xlabel('Type of Service')
+    # plt.title('Services Bar Plot')
+    # plt.show()
+
+def proto(data):
+
+    general = data.shape[0] 
+    main = 0
+    for i in data.proto:
+        if i=="tcp" or i == "udp":
+            main += 1
+    print ("The percentage of the 2 main classes over all the data is {}%".format((main/general)*100))
+
+    #Following is code for bar plot
+    # label = []
+    # count = []
+    # endrange = ((pd.DataFrame(data.proto.value_counts())).shape[0])+1
+    # generalCount= data.proto.value_counts()
+    # for i in range (1,endrange):
+    #     label.append((str(generalCount[i-1:i]).split())[0])
+    #     count.append((str(generalCount[i-1:i]).split()[1]))
+
+    # plt.bar(label,[int(x) for x in count], label = 'Data Point Count')
+    # plt.ylabel('Protocol Count')
+    # plt.xlabel('Type of Protocol')
+    # plt.title('Protocols Bar Plot')
+    # plt.show()
+
+def states(data):
+    
+
+    general = data.shape[0] 
+    main = 0
+    for i in data.state:
+        if i=="FIN" or i == "CON" or i == "INT":
+            main += 1
+    print ("The percentage of the 3 main classes over all the data is {}%".format((main/general)*100))
+
+    #Code to produce the bar plot for the states
+    
+    # label = []
+    # count = []
+    # endrange = ((pd.DataFrame(data.state.value_counts())).shape[0])+1
+    # generalCount= data.state.value_counts()
+    # for i in range (1,endrange):
+    #     label.append((str(generalCount[i-1:i]).split())[0])
+    #     count.append((str(generalCount[i-1:i]).split()[1]))
+
+
+    # plt.bar(label,[int(x) for x in count], label = 'Data Point Count')
+    # plt.ylabel('Count')
+    # plt.xlabel('Type of State')
+    # plt.title('States Bar Plot')
+    # plt.show()
+
+
+def attackCatPlot(data):
+    #row_number = data.shape[0]
+    catIndices = []
+    catCount = []
+    endRange = ((pd.DataFrame(data.attack_cat.value_counts())).shape[0])+1
+    generalCount= data.attack_cat.value_counts()
+    for i in range (1,endRange):
+        catIndices.append((str(generalCount[i-1:i]).split())[0])
+        catCount.append((str(generalCount[i-1:i]).split()[1]))
+        
+  
+
+    #The pie chart plot for this heavily imbalanced plot does not work
+
+
+    # colors = ['#003f5c',"#2f4b7c","#665191","#a05195","#bc5090","#d45087","#f95d6a","#ff7c43","#ff6361","#ffa600"]
+    # plt.pie(catCount,labels=catIndices,colors=colors,autopct='%1.1f%%',shadow= True,startangle = 140)
+    # plt.axis('equal')
+    # plt.show()
+
+
+    #Code for the bar plot
+
+    # plt.bar(catIndices,[int(x) for x in catCount], label = 'Data Point Count')
+    # plt.ylabel('Dataset Count')
+    # plt.xlabel('Type of Attack')
+    # plt.title('Attack Category Bar Plot')
+    # plt.show()
+    #anablyse the behaviour
+def targetPort(data):
+    #enc = LeaveOneOutEncoder(cols=['gender', 'country'], handle_unknown='impute', sigma=0.02, random_state=42)
+    tar = pd.Series(data.Label.astype(int))
+    test = pd.DataFrame(data.sport.astype(int))
+    print (test)
+    enc = LeaveOneOutEncoder(cols=['sport'],handle_unknown="impute",sigma=0.02,random_state=42)
+    print (test.shape, tar.shape)
+    ports = enc.fit_transform(X=test,y=tar)
+    print (ports)
+
+def transformIP (ip):
+    groups = ip.split(".")
+    equalize_group_length = "".join( map( lambda group: group.zfill(3), groups ))
+    left_pad_with_zeros = list(( equalize_group_length ).zfill( IPV4_LENGTH ))
+    return left_pad_with_zeros
+
+def one_hot_ip(data):
+    """
+    Converts the ipAddress column of pandas DataFrame df, to one-hot
+    Also returns the encoder used
+    """
+    enc = OneHotEncoder()
+    ip_df = (data.srcip.apply( lambda ip: transformIP(ip) )).apply( pd.Series ) # creates separate columns for each char in IP
+    print(ip_df)
+    X_ip = enc.fit_transform( ip_df )
+    print (X_ip)
+
+    return X_ip
+def encodeIP(data):
+    for i, rows in data.iterrows(): 
+        data.at[i,'srcip'] = transformIP( data.at[i,'srcip'])   
+    return data
+
+def plotTime(data):
+    temp = pd.to_numeric(data.Stime.value_counts().astype(int))
+
+    temp = temp.sort_index()
+    ax = plt.axes()
+    ax.plot(temp) 
+    ax.get_xaxis().set_visible(False)
+    plt.show()   
+
+def main():
+    labels =  read_features().Name
+    data = read_clean_data(clean,17000)
+    for i in data.Stime:
+        if isinstance(i,str):
+            print (i)
+    #plotTime(data)
+    #applyTSNE(data)
+    #services(data)
+    #targetPort(data)
+    #newdata = one_hot_ip(data)
+    # print (data.sloss.value_counts())
+    # print (data.dloss.value_counts())
+    #proto(data)
+    #states(data)
+    #attackCatPlot(data)
+    #df = pd.DataFrame({'Attack Category': data.attack_cat},index = (data.attack_cat.value_counts()[0]))
+    
+if __name__ == '__main__':
+    clean = "imbalanced/all_clean_data.csv"
+    IPV4_LENGTH = 12
+    main()
