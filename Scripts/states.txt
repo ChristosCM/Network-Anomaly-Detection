@@ -1,0 +1,14 @@
+Normal|Abnormal|State
+7774|1269|REQ|Cannot be excluded
+455|73|RST|Cannot be excluded
+335|2|ECO|Cannot be excluded
+160|1|CLO|Cannot be excluded
+88|20|URH|Cannot be excluded
+41|2|ACC|Cannot be excluded
+28|0|PAR|Can be excluded
+8|0|TST|Can be excluded
+8|0|ECR|Can be excluded
+7|0|no|Can be excluded
+7|0|URN|Can be excluded
+7|0|MAS|Can be excluded
+6|0|TXD|Can be excluded
