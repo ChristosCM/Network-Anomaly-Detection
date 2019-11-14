@@ -267,9 +267,75 @@ def attackCatPlot(data):
     for i in range (1,endRange):
         catIndices.append((str(generalCount[i-1:i]).split())[0])
         catCount.append((str(generalCount[i-1:i]).split()[1]))
-        
-  
 
+def excludePort(data):
+
+    sports = data.sport.value_counts()
+    dsports = data.dsport.value_counts()
+
+    
+    excSport = pd.DataFrame(
+        {
+            "sport":[],
+            "normal":[],
+            "abnormal":[],
+            "excluded":[]
+        }
+    )
+    
+    excDsport = pd.DataFrame(
+        {
+            "dsport":[],
+            "normal":[],
+            "abnormal":[],
+            "excluded":[]
+        }
+    )
+    for index,row in sports.iteritems():
+        df = pd.DataFrame(
+                {
+                    "sport":[index],
+                    "normal":[0],
+                    "abnormal":[0],
+                    "excluded":[True]
+                }
+            )
+        excSport = excSport.append(df)
+    excSport = excSport.reset_index(drop=True)
+
+    for index,row in dsports.iteritems():
+        df = pd.DataFrame(
+                {
+                    "dsport":[index],
+                    "normal":[0],
+                    "abnormal":[0],
+                    "excluded":[True]
+                }
+            )
+        excDsport = excDsport.append(df)
+    excDsport = excDsport.reset_index(drop=True)
+
+    for index,port in excSport.iterrows():
+        for _,row in data.iterrows():
+            if int(port.sport)==int(row.sport):
+                if int(row.Label)==0:
+                    excSport.loc[index,'normal'] = int(excSport.loc[index,'normal'])+ 1
+                else:
+                    excSport.loc[index,'abnormal'] += 1
+                    excSport.loc[index,'excluded'] = False
+    
+
+    for index,port in excDsport.iterrows():
+        for _,row in data.iterrows():
+            if int(port.dsport)==int(row.dsport):
+                if int(row.Label)==0:
+                    excDsport.loc[index,'normal'] = int(excDsport.loc[index,'normal'])+ 1
+                else:
+                    excDsport.loc[index,'abnormal'] += 1
+                    excDsport.loc[index,'excluded'] = False
+    
+    excDsport.to_csv("DestPorts.csv")
+    excSport.to_csv("SrcPorts.csv")
     #The pie chart plot for this heavily imbalanced plot does not work
 
 
@@ -287,16 +353,20 @@ def attackCatPlot(data):
     # plt.title('Attack Category Bar Plot')
     # plt.show()
     #anablyse the behaviour
+# def targetEncodePort(data):
+#     tar = pd.Series(data.Label.astype(int))
+#     test = pd.DataFrame(data.sport.astype(int))
+#     enc = category_encoders.target_encoder.TargetEncoder(verbose = 0, cols=['sport'])
+
 def targetPort(data):
     #enc = LeaveOneOutEncoder(cols=['gender', 'country'], handle_unknown='impute', sigma=0.02, random_state=42)
+    #the target is the label 0 or 1 Z|| 0 for normal and 1 for abnormal
     tar = pd.Series(data.Label.astype(int))
-    test = pd.DataFrame(data.sport.astype(int))
-    print (test)
-    enc = LeaveOneOutEncoder(cols=['sport'],handle_unknown="impute",sigma=0.02,random_state=42)
-    print (test.shape, tar.shape)
+    #the test is just the ports
+    test = pd.DataFrame([data.sport,data.dsport]).transpose()
+    enc = LeaveOneOutEncoder(cols=['sport','dsport'], handle_unknown='impute', sigma=0.00, random_state=0)
     ports = enc.fit_transform(X=test,y=tar)
-    print (ports)
-
+    return pd.DataFrame([ports.loo_sport,ports.loo_dsport]).transpose()
 def transformIP (ip):
     groups = ip.split(".")
     equalize_group_length = "".join( map( lambda group: group.zfill(3), groups ))
@@ -319,24 +389,29 @@ def encodeIP(data):
     for i, rows in data.iterrows(): 
         data.at[i,'srcip'] = transformIP( data.at[i,'srcip'])   
     return data
-
+#function to normalize the counter data to 0-1
+def normalizeCounters(data):
+    return None
 def plotTime(data):
     temp = pd.to_numeric(data.Stime.value_counts().astype(int))
+    print (temp)
 
-    temp = temp.sort_index()
-    ax = plt.axes()
-    ax.plot(temp) 
-    ax.get_xaxis().set_visible(False)
-    plt.show()   
+    #funcion to plot the data by arranging the times based on the index (which is the time) 
+    # temp = temp.sort_index()
+    # ax = plt.axes()
+    # ax.plot(temp) 
+    # ax.get_xaxis().set_visible(False)
+    # plt.show()   
 
 def main():
     labels =  read_features().Name
-    data = read_clean_data(clean,1000000)
-    states(data)
+    data = read_clean_data(clean,22)
+    excludePort(data)
+    #states(data)
     #plotTime(data)
     #applyTSNE(data)
     #services(data)
-    #targetPort(data)
+    #(targetPort(data))
     #newdata = one_hot_ip(data)
     # print (data.sloss.value_counts())
     # print (data.dloss.value_counts())
