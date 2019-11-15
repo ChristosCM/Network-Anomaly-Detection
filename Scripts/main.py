@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.datasets import fetch_openml
 from sklearn.manifold import TSNE
+from sklearn import preprocessing
 from category_encoders import *
 from loo_encoder.encoder import LeaveOneOutEncoder
 import seaborn as sns
@@ -443,9 +444,10 @@ def countExcluded(excdata):
     exc
 def main():
     labels =  read_features().Name
-    data = read_clean_data(clean,0)
-    #data = data.astype({'Label': int})
-
+    data = read_clean_data(clean,100)
+    data = data.astype({'ct_srv_src': int})
+    data.ct_srv_src.plot(kind='bar')
+    plt.show()
     excludeService(data)
     #states(data)
     #plotTime(data)
