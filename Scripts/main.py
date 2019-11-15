@@ -112,7 +112,25 @@ def services(data):
     # plt.xlabel('Type of Service')
     # plt.title('Services Bar Plot')
     # plt.show()
-
+def excludeProto(data):
+    #prots to look at: unas arp ospf sctp icmp any
+    protosdf = pd.DataFrame(
+        {
+            "proto":["unas", "arp", "ospf", "sctp" ,"icmp","any"],
+            "normal":[0,0,0,0,0,0],
+            "abnormal":[0,0,0,0,0,0],
+            "excluded":[False,False,False,False,False,False]
+        }
+    )
+    for index,row in tqdm(data.iterrows(),total=data.shape[0]):
+        if int(row.Label)==0:
+            #normal
+            protosdf.loc[protosdf.proto==row.proto,'normal']+=1
+        else:
+            #abnormal
+            protosdf.loc[protosdf.proto==row.proto,'abnormal']+=1
+            protosdf.loc[protosdf.proto==row.proto,'excluded'] = False
+    protosdf.to_csv("ProtocolsExcluded.csv")
 def proto(data):
 
     general = data.shape[0] 
@@ -136,7 +154,23 @@ def proto(data):
     # plt.xlabel('Type of Protocol')
     # plt.title('Protocols Bar Plot')
     # plt.show()
-
+def excludeService(data):
+    services = pd.DataFrame(
+        {
+            "service":["pop3","dhcp","ssl","snmp","radius","irc"],
+            "normal":[0,0,0,0,0,0],
+            "abnormal":[0,0,0,0,0,0],
+            "excluded":[False,False,False,False,False,False]
+        }
+    )
+    for index,row in tqdm(data.iterrows(),total=data.shape[0]):
+        if int(row.Label)==0:
+            #normal
+            services.loc[services.service==row.service,'normal']+=1
+        else:
+            #abnormal
+            services.loc[services.service==row.service,'abnormal']+=1
+            services.loc[services.service==row.service,'excluded'] = False
 def states(data):
     
     req = [0,0, "REQ"]
@@ -219,6 +253,11 @@ def states(data):
             else:
                 txd[1] += 1
     final = [req,rst,eco,clo,urh,acc,par,tst,ecr,no,urn,mas,txd]   
+    pd.DataFrame(
+        {
+            "state":[]
+        }
+    )
     for i in range (len(final)):
         if final[i][1]==0:
             final[i].append("Can be excluded")
@@ -334,25 +373,7 @@ def excludePort(data):
             excDsport.loc[excDsport.dsport==row.dsport,'excluded'] = False
 
 
-    # for index,port in excSport.iterrows():
-    #     for _,row in data.iterrows():
-    #         if int(port.sport)==int(row.sport):
-    #             if int(row.Label)==0:
-    #                 print(index,row.sport)
-    #                 excSport.loc[index,'normal'] = int(excSport.loc[index,'normal'])+ 1
-    #             else:
-    #                 excSport.loc[index,'abnormal'] += 1
-    #                 excSport.loc[index,'excluded'] = False
-    
-
-    # for index,port in tqdm(excDsport.iterrows(),total = excDsport.shape[0]):
-    #     for _,row in data.iterrows():
-    #         if int(port.dsport)==int(row.dsport):
-    #             if int(row.Label)==0:
-    #                 excDsport.loc[index,'normal'] = int(excDsport.loc[index,'normal'])+ 1
-    #             else:
-    #                 excDsport.loc[index,'abnormal'] += 1
-    #                 excDsport.loc[index,'excluded'] = False
+  
     
     excDsport.to_csv("DestPorts.csv")
     excSport.to_csv("SrcPorts.csv")
@@ -423,10 +444,12 @@ def plotTime(data):
     # ax.get_xaxis().set_visible(False)
     # plt.show()   
 
+def countExcluded(excdata):
+    exc
 def main():
     labels =  read_features().Name
     data = read_clean_data(clean,0)
-    excludePort(data)
+    excludeProto(data)
     #states(data)
     #plotTime(data)
     #applyTSNE(data)
