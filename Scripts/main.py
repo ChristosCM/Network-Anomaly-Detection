@@ -155,22 +155,17 @@ def proto(data):
     # plt.title('Protocols Bar Plot')
     # plt.show()
 def excludeService(data):
-    services = pd.DataFrame(
+    new = data[['service','Label']].copy()
+    new = new.astype({'Label': int})
+    results = pd.DataFrame(
         {
             "service":["pop3","dhcp","ssl","snmp","radius","irc"],
-            "normal":[0,0,0,0,0,0],
-            "abnormal":[0,0,0,0,0,0],
-            "excluded":[False,False,False,False,False,False]
+            "normal":[len(new[(new.service=="http")&(new.Label==0)]),len(new[(new.service=="dhcp")&(new.Label==0)]),len(new[(new.service=="ssl")&(new.Label==0)]),len(new[(new.service=="snmp")&(new.Label==0)]),len(new[(new.service=="radius")&(new.Label==0)]),len(new[(new.service=="irc")&(new.Label==0)])],
+            "abnormal":[len(new[(new.service=="http")&(new.Label==1)]),len(new[(new.service=="dhcp")&(new.Label==1)]),len(new[(new.service=="ssl")&(new.Label==1)]),len(new[(new.service=="snmp")&(new.Label==1)]),len(new[(new.service=="radius")&(new.Label==1)]),len(new[(new.service=="irc")&(new.Label==1)])]
+            
         }
     )
-    for index,row in tqdm(data.iterrows(),total=data.shape[0]):
-        if int(row.Label)==0:
-            #normal
-            services.loc[services.service==row.service,'normal']+=1
-        else:
-            #abnormal
-            services.loc[services.service==row.service,'abnormal']+=1
-            services.loc[services.service==row.service,'excluded'] = False
+    results.to_csv("ServicesExcluded.csv")
 def states(data):
     
     req = [0,0, "REQ"]
@@ -449,7 +444,9 @@ def countExcluded(excdata):
 def main():
     labels =  read_features().Name
     data = read_clean_data(clean,0)
-    excludeProto(data)
+    #data = data.astype({'Label': int})
+
+    excludeService(data)
     #states(data)
     #plotTime(data)
     #applyTSNE(data)

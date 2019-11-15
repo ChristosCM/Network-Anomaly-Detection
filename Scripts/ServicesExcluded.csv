@@ -1,0 +1,7 @@
+,service,normal,abnormal
+0,pop3,187426,18847
+1,dhcp,0,172
+2,ssl,0,142
+3,snmp,1,112
+4,radius,10,30
+5,irc,1,30
