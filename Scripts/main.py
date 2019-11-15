@@ -10,7 +10,7 @@ import seaborn as sns
 import time
 import hypertools as hyp
 from matplotlib.animation import FuncAnimation
-
+from tqdm import tqdm
 
 def read_features():
     input_file = "featuresCat.csv"
@@ -31,7 +31,7 @@ def read_features():
 def read_clean_data(data,rows):
     feat = read_features()
     stime = time.time()
-    #may need to add chunksize here to make this more efficient when testing
+    #may need to add chunksize here to make this more efficiet when testing
     if rows == 0:
         cleanData = pd.read_csv(data, names = feat.Name)
         print("It took {} to read the data".format((time.time()-stime)))
@@ -291,7 +291,7 @@ def excludePort(data):
             "excluded":[]
         }
     )
-    for index,row in sports.iteritems():
+    for index,row in tqdm(sports.iteritems(),total=sports.size):
         df = pd.DataFrame(
                 {
                     "sport":[index],
@@ -303,7 +303,7 @@ def excludePort(data):
         excSport = excSport.append(df)
     excSport = excSport.reset_index(drop=True)
 
-    for index,row in dsports.iteritems():
+    for index,row in tqdm(dsports.iteritems(),total=dsports.size):
         df = pd.DataFrame(
                 {
                     "dsport":[index],
@@ -315,24 +315,44 @@ def excludePort(data):
         excDsport = excDsport.append(df)
     excDsport = excDsport.reset_index(drop=True)
 
-    for index,port in excSport.iterrows():
-        for _,row in data.iterrows():
-            if int(port.sport)==int(row.sport):
-                if int(row.Label)==0:
-                    excSport.loc[index,'normal'] = int(excSport.loc[index,'normal'])+ 1
-                else:
-                    excSport.loc[index,'abnormal'] += 1
-                    excSport.loc[index,'excluded'] = False
+    for index,row in tqdm(data.iterrows(),total=data.shape[0]):
+        if int(row.Label)==0:
+            #normal
+            excSport.loc[excSport.sport==row.sport,'normal']+=1
+        else:
+            #abnormal
+            excSport.loc[excSport.sport==row.sport,'abnormal']+=1
+            excSport.loc[excSport.sport==row.sport,'excluded'] = False
+
+    for index,row in tqdm(data.iterrows(),total=data.shape[0]):
+        if int(row.Label)==0:
+            #normal
+            excDsport.loc[excDsport.dsport==row.dsport,'normal']+=1
+        else:
+            #abnormal
+            excDsport.loc[excDsport.dsport==row.dsport,'abnormal']+=1
+            excDsport.loc[excDsport.dsport==row.dsport,'excluded'] = False
+
+
+    # for index,port in excSport.iterrows():
+    #     for _,row in data.iterrows():
+    #         if int(port.sport)==int(row.sport):
+    #             if int(row.Label)==0:
+    #                 print(index,row.sport)
+    #                 excSport.loc[index,'normal'] = int(excSport.loc[index,'normal'])+ 1
+    #             else:
+    #                 excSport.loc[index,'abnormal'] += 1
+    #                 excSport.loc[index,'excluded'] = False
     
 
-    for index,port in excDsport.iterrows():
-        for _,row in data.iterrows():
-            if int(port.dsport)==int(row.dsport):
-                if int(row.Label)==0:
-                    excDsport.loc[index,'normal'] = int(excDsport.loc[index,'normal'])+ 1
-                else:
-                    excDsport.loc[index,'abnormal'] += 1
-                    excDsport.loc[index,'excluded'] = False
+    # for index,port in tqdm(excDsport.iterrows(),total = excDsport.shape[0]):
+    #     for _,row in data.iterrows():
+    #         if int(port.dsport)==int(row.dsport):
+    #             if int(row.Label)==0:
+    #                 excDsport.loc[index,'normal'] = int(excDsport.loc[index,'normal'])+ 1
+    #             else:
+    #                 excDsport.loc[index,'abnormal'] += 1
+    #                 excDsport.loc[index,'excluded'] = False
     
     excDsport.to_csv("DestPorts.csv")
     excSport.to_csv("SrcPorts.csv")
@@ -405,7 +425,7 @@ def plotTime(data):
 
 def main():
     labels =  read_features().Name
-    data = read_clean_data(clean,22)
+    data = read_clean_data(clean,0)
     excludePort(data)
     #states(data)
     #plotTime(data)
