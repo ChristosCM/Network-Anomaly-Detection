@@ -41,7 +41,7 @@ def read_clean_data(data,rows):
         cleanData = pd.read_csv(data, names = feat.Name, nrows = rows)
         print("It took {} to read {} rows from the data".format((time.time()-stime),rows))
 
-    cleanData =  (cleanData.reset_index().drop([0],axis=0))
+    #cleanData =  (cleanData.reset_index().drop([0],axis=0))
     return cleanData
     #ip = pd.DataFrame(cleanData.srcip.value_counts())
 
@@ -167,6 +167,21 @@ def excludeService(data):
         }
     )
     results.to_csv("ServicesExcluded.csv")
+def excludeState(data):
+    new = data[['state','Label']].copy()
+    new = new.astype({'Label': int})
+    print((len(new[new.state=="URH"])))
+    return None
+    stateList = data.state.unique()
+    results = pd.DataFrame(
+        {
+            "state":stateList,
+            "normal":[len(new[(new.state==state)&(new.Label==0)]) for state in stateList ],
+            "abnormal":[len(new[(new.state==state)&(new.Label==1)]) for state in stateList ]
+            
+        }
+    )
+    results.to_csv("StatesExcluded.csv")
 def states(data):
     
     req = [0,0, "REQ"]
@@ -427,8 +442,15 @@ def encodeIP(data):
         data.at[i,'srcip'] = transformIP( data.at[i,'srcip'])   
     return data
 #function to normalize the counter data to 0-1
-def normalizeCounters(data):
-    return None
+def normalizeCounters(data,cnt):
+    
+    data = data.astype({cnt: int})
+
+    counter = data[[cnt]].values.astype(int) 
+    min_max_scaler = preprocessing.MinMaxScaler()
+    counter_scaled = min_max_scaler.fit_transform(counter)
+    counter_normalized = pd.DataFrame(counter_scaled)
+    return counter_normalized
 def plotTime(data):
     temp = pd.to_numeric(data.Stime.value_counts().astype(int))
     print (temp)
@@ -440,15 +462,58 @@ def plotTime(data):
     # ax.get_xaxis().set_visible(False)
     # plt.show()   
 
-def countExcluded(excdata):
-    exc
+def calcExcluded():
+
+    sports = pd.read_csv("SrcPorts.csv")
+    dsports = pd.read_csv("DestPorts.csv")
+    
+    excsp = sports.excluded.value_counts()
+    excdsp = dsports.excluded.value_counts()
+    
+    with open("excports.txt",'w') as file:
+        file.write("The number of source ports that can be excluded are {} of the total {} \n".format(excsp['False'],sports.shape[0]))
+        file.write("The number of destination ports that can be excluded are {} of the total {}\n".format(excdsp['False'], dsports.shape[0]))
+    
+#write the time data to preview
+def exampleTimeData(data):
+    #data = data.head()
+    with open("timeinfo.txt","w") as file:
+        file.write("Example of sttl (and dsttl) {} \n".format(data.sttl))    
+        file.write("Example of Stime (and Ltime) {} \n".format(data.Stime))    
+        file.write("Example of Sintpkt (and Dintpkt) {} \n".format(data.Sintpkt))
+        file.write("Example of tcprtt  {} \n".format(data.tcprtt))    
+        file.write("Example of synack {} \n".format(data.synack))    
+        file.write("Example of ackdat  {} \n".format(data.ackdat))
+
+
 def main():
+    #read the features and labels and assign them 
     labels =  read_features().Name
-    data = read_clean_data(clean,100)
-    data = data.astype({'ct_srv_src': int})
-    data.ct_srv_src.plot(kind='bar')
+    data = read_clean_data(clean,0)
+    
+    dates = pd.to_datetime(data.Stime,unit='s') 
+    data.Stime = dates.dt.minute
+    data = data.astype({'Label': int})
+    test =  (data.Stime.value_counts())
+    test = test.sort_index()
+    test.plot(kind='bar')
+    #test.get_xaxis().set_visible(False)
     plt.show()
-    excludeService(data)
+
+    #print(len(data[(data.Stime==4)&(data.Label==1)]))   
+    #exampleTimeData(data)
+    #call function with which one you want to normalize, doesn't change the data yet
+    # new = normalizeCounters(data,'ct_srv_src')
+    # print (new)
+
+    #very slow for the whole data
+    #data = data.astype({'ct_srv_src': int})
+    # data.ct_srv_src.plot(kind='bar')
+    # data.get_xaxis().set_visible(False)
+    # plt.show()
+
+
+
     #states(data)
     #plotTime(data)
     #applyTSNE(data)

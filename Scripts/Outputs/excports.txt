@@ -1,0 +1,2 @@
+The number of source ports that can be excluded are 41263 of the total 78713 
+The number of destination ports that can be excluded are 3244 of the total 68386

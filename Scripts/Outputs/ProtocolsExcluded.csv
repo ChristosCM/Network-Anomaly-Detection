@@ -1,0 +1,7 @@
+,proto,normal,abnormal,excluded
+0,unas,0,16202,False
+1,arp,10064,0,True
+2,ospf,4520,3278,False
+3,sctp,0,1525,False
+4,icmp,516,0,True
+5,any,0,411,False

@@ -1,0 +1,17 @@
+,state,normal,abnormal,excluded
+0,CON,559090,1495,False
+1,INT,229850,260620,False
+2,FIN,1420766,57923,False
+3,URH,108,0,True
+4,REQ,7814,1229,False
+5,ECO,337,0,True
+6,RST,515,13,False
+7,CLO,160,1,False
+8,TXD,6,0,True
+9,URN,7,0,True
+10,no,7,0,True
+11,ACC,41,2,False
+12,PAR,28,0,True
+13,MAS,7,0,True
+14,TST,8,0,True
+15,ECR,8,0,True
