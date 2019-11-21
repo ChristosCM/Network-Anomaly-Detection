@@ -11,8 +11,11 @@ import seaborn as sns
 import time
 import hypertools as hyp
 from matplotlib.animation import FuncAnimation
+#library to show progress bar in for loops
 from tqdm import tqdm
 
+#library to make a 3D plot
+# from mpl_toolkits.mplot3d import Axes3D
 def read_features():
     input_file = "featuresCat.csv"
     featuresTable = pd.read_csv(input_file,encoding = "ISO-8859-1",names = ['No.','Name', 'Type', 'Description'])
@@ -34,11 +37,11 @@ def read_clean_data(data,rows):
     stime = time.time()
     #may need to add chunksize here to make this more efficiet when testing
     if rows == 0:
-        cleanData = pd.read_csv(data, names = feat.Name)
+        cleanData = pd.read_csv(data)#names = feat.Name)
         print("It took {} to read the data".format((time.time()-stime)))
 
     else:
-        cleanData = pd.read_csv(data, names = feat.Name, nrows = rows)
+        cleanData = pd.read_csv(data, nrows = rows)#, names = feat.Name)
         print("It took {} to read {} rows from the data".format((time.time()-stime),rows))
 
     #cleanData =  (cleanData.reset_index().drop([0],axis=0))
@@ -310,14 +313,36 @@ def states(data):
 
 def attackCatPlot(data):
     #row_number = data.shape[0]
-    catIndices = []
-    catCount = []
-    endRange = ((pd.DataFrame(data.attack_cat.value_counts())).shape[0])+1
-    generalCount= data.attack_cat.value_counts()
-    for i in range (1,endRange):
-        catIndices.append((str(generalCount[i-1:i]).split())[0])
-        catCount.append((str(generalCount[i-1:i]).split()[1]))
+    #this step is already done so we can use the csv file to plot 
+    # new = data[['attack_cat','Label']].copy()
+    # new = new.astype({'Label': int})
+    # catList = data.attack_cat.unique()
+    # catList = np.delete(catList,0)
+    # results = pd.DataFrame(
+    #     {
+    #         "attack_cat":catList,
+    #         "normal":[len(new[(new.attack_cat==attack_cat)&(new.Label==0)]) for attack_cat in catList ],
+    #         "abnormal":[len(new[(new.attack_cat==attack_cat)&(new.Label==1)]) for attack_cat in catList ]
+            
+    #     }
+    # )
+    # results.to_csv("AttackCat_Counter.csv")
 
+
+    # catIndices = []
+    # catCount = []
+    # endRange = ((pd.DataFrame(data.attack_cat.value_counts())).shape[0])+1
+    # generalCount= data.attack_cat.value_counts()
+    # for i in range (1,endRange):
+    #     catIndices.append((str(generalCount[i-1:i]).split())[0])
+    #     catCount.append((str(generalCount[i-1:i]).split()[1]))
+
+    attack = pd.read_csv("AttackCat_Counter.csv")
+    labels = attack.attack_cat.tolist()
+    numbers = attack.abnormal.tolist()
+    total = sum(numbers)
+    
+    
 def excludePort(data):
 
     sports = data.sport.value_counts()
@@ -422,21 +447,53 @@ def targetPort(data):
 def transformIP (ip):
     groups = ip.split(".")
     equalize_group_length = "".join( map( lambda group: group.zfill(3), groups ))
-    left_pad_with_zeros = list(( equalize_group_length ).zfill( IPV4_LENGTH ))
+    left_pad_with_zeros = list(( equalize_group_length ).zfill( IPV4_LENGTH ))[-3:]
     return left_pad_with_zeros
-
+def oneHotProtocol(data):
+    enc = OneHotEncoder()
+    encoded = enc.fit_transform(data.proto)
+    print (encoded)
+    return encoded
 def one_hot_ip(data):
     """
     Converts the ipAddress column of pandas DataFrame df, to one-hot
     Also returns the encoder used
     """
     enc = OneHotEncoder()
+    #print (data.srcip.apply( lambda ip: transformIP(ip) ))
     ip_df = (data.srcip.apply( lambda ip: transformIP(ip) )).apply( pd.Series ) # creates separate columns for each char in IP
-    print(ip_df)
     X_ip = enc.fit_transform( ip_df )
-    print (X_ip)
+    print (X_ip.shape[1])
 
     return X_ip
+def analyzeIP(data):
+    srcip = data.srcip.str.split(".", expand=True).astype(int)
+    #dstip = data.dstip.str.split(".",expand = True)
+    srcip["cat"] = data.attack_cat
+    #dstip["cat"] = data.attack_cat 
+
+    #3D plot not completed
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+    # ax.scatter(srcip[0], [0,1,2,3,4,5,6,7,8], srcip.index.values, c='skyblue', s=60)
+    # ax.view_init(30, 185)
+
+    #make the count plot 
+    #ax = sns.countplot(y="cat",hue=data.srcip, data=srcip)
+
+    #scatter plot of IPs
+    #need to make the hue better
+    # ax = sns.catplot(x="cat",y=0, kind = "swarm", data = srcip)
+    
+    #doesnt work, initial countplot will have to do
+    # fig, ax = plt.subplots()
+    # ax.plot(srcip.cat, srcip[0].tolist(), label="P1")
+    # ax.plot(srcip.cat, srcip[1].tolist(), label="P2")
+    # ax.plot(srcip.cat, srcip[2].tolist(), label="P3")
+    # ax.plot(srcip.cat, srcip[3].tolist(), label="P4")
+    # ax.legend()    
+
+    plt.show()
 def encodeIP(data):
     for i, rows in data.iterrows(): 
         data.at[i,'srcip'] = transformIP( data.at[i,'srcip'])   
@@ -454,6 +511,16 @@ def normalizeCounters(data,cnt):
 def plotTime(data):
     temp = pd.to_numeric(data.Stime.value_counts().astype(int))
     print (temp)
+
+    dates = pd.to_datetime(data.Stime,unit='s') 
+    data.Stime = dates.dt.minute
+    data = data.astype({'Label': int})
+    test =  (data.Stime.value_counts())
+    test = test.sort_index()
+    test.plot(kind='bar')
+    plt.show()
+
+    #test.get_xaxis().set_visible(False)
 
     #funcion to plot the data by arranging the times based on the index (which is the time) 
     # temp = temp.sort_index()
@@ -475,6 +542,7 @@ def calcExcluded():
         file.write("The number of destination ports that can be excluded are {} of the total {}\n".format(excdsp['False'], dsports.shape[0]))
     
 #write the time data to preview
+ 
 def exampleTimeData(data):
     #data = data.head()
     with open("timeinfo.txt","w") as file:
@@ -485,20 +553,47 @@ def exampleTimeData(data):
         file.write("Example of synack {} \n".format(data.synack))    
         file.write("Example of ackdat  {} \n".format(data.ackdat))
 
+def write(data):
+    if ROWS == 0:
+        data.to_csv("all_clean_data.csv")
+    else:
+        print ("Only {} were selected, cancelling operation...".format(ROWS))
+def allNormalize(data):
+
+    #the counters srv_dst and ftp_cmd have already been normalized and changed in the dataset
+    data.ct_state_ttl = normalizeCounters(data,"ct_state_ttl").values
+    data.ct_flw_http_mthd = normalizeCounters(data,"ct_flw_http_mthd").values
+
+    data.ct_srv_src = normalizeCounters(data,"ct_srv_src").values
+
+    data.ct_dst_ltm = normalizeCounters(data,"ct_dst_ltm").values
+
+    data.ct_src_ltm = normalizeCounters(data,"ct_src_ ltm").values
+
+    data.ct_src_dport_ltm = normalizeCounters(data,"ct_src_dport_ltm").values
+
+    data.ct_dst_sport_ltm = normalizeCounters(data,"ct_dst_sport_ltm").values
+
+    data.ct_dst_src_ltm = normalizeCounters(data,"ct_dst_src_ltm").values
 
 def main():
     #read the features and labels and assign them 
-    labels =  read_features().Name
-    data = read_clean_data(clean,0)
-    
-    dates = pd.to_datetime(data.Stime,unit='s') 
-    data.Stime = dates.dt.minute
-    data = data.astype({'Label': int})
-    test =  (data.Stime.value_counts())
-    test = test.sort_index()
-    test.plot(kind='bar')
-    #test.get_xaxis().set_visible(False)
-    plt.show()
+    #labels =  read_features().Name
+
+    #read the data 0 to read all of it or use a custom number to read the first n rows of the data
+    data = read_clean_data(clean,ROWS)
+
+    df = oneHotProtocol(data)
+    data = data.join(df)
+    print (df.shape[1])
+    write(data)
+
+    #remove the added list of indices if we want (the first column that tags Unnamed)
+    #data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
+
+
+    #data = data.astype({'Label': int})
+    #data = data.drop(data[(data.state!="REQ")&~(data.state=="RST")&~(data.state=="FIN")&~(data.state=="CON")&~(data.state=="INT")].index)
 
     #print(len(data[(data.Stime==4)&(data.Label==1)]))   
     #exampleTimeData(data)
@@ -528,6 +623,7 @@ def main():
     #df = pd.DataFrame({'Attack Category': data.attack_cat},index = (data.attack_cat.value_counts()[0]))
     
 if __name__ == '__main__':
-    clean = "imbalanced/all_clean_data.csv"
-    IPV4_LENGTH = 12
+    clean = "all_clean_data.csv"
+    IPV4_LENGTH =12
+    ROWS = 0
     main()

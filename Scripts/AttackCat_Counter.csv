@@ -1,0 +1,10 @@
+,attack_cat,normal,abnormal
+0,Exploits,0,44525
+1,Reconnaissance,0,13987
+2,DoS,0,16353
+3,Generic,0,215481
+4,Shellcode,0,1511
+5,Fuzzers,0,24246
+6,Worms,0,174
+7,Backdoor,0,2329
+8,Analysis,0,2677
