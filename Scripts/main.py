@@ -2,9 +2,14 @@ import pandas as pd #0.24.2
 from pandas.plotting import scatter_matrix
 import numpy as np 
 import matplotlib.pyplot as plt
+
 from sklearn.datasets import fetch_openml
 from sklearn.manifold import TSNE
-from sklearn import preprocessing
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import StandardScaler
+
 from category_encoders import *
 from loo_encoder.encoder import LeaveOneOutEncoder
 import seaborn as sns
@@ -59,13 +64,82 @@ def read_clean_data(data,rows):
     # cleanData = pd.read_csv(clean, names = feat.Name)
    
     # print ("Normal:{}, Abnormal:{}, Normal Percentage: {}".format(normal,abnormal, (normal/(normal+abnormal))*100))
+def applyPCA(data):
+    targets = data[['Label','attack_cat']].copy()
+    features = data.drop(['Label','attack_cat'],axis=1)
+    
+    features = StandardScaler().fit_transform(features)
 
+
+    pca = PCA(n_components=3)
+    principalComponents = pca.fit_transform(features)
+    principalDf = pd.DataFrame(data = principalComponents, columns = ['pca1', 'pca2','pca3'])
+    finalDf = pd.concat([principalDf, targets.attack_cat], axis = 1)
+
+    #sns plot 2D
+    # plt.figure(figsize=(16,10))
+    # sns.scatterplot(
+    # x="pca1", y="pca2",
+    # hue=finalDf.attack_cat,
+    # palette=sns.color_palette("hls", len(targets.attack_cat.unique().tolist())),
+    # data=principalDf,
+    # legend="full",
+    # alpha=0.3)
+    # plt.show()
+
+    ax = plt.figure(figsize=(16,10)).gca(projection='3d')
+    ax.scatter(
+        xs=principalDf.pca1, 
+        ys=principalDf.pca2, 
+        zs=principalDf.pca3, 
+        c=None, 
+        cmap='tab10'
+    )
+    ax.set_xlabel('pca-one')
+    ax.set_ylabel('pca-two')
+    ax.set_zlabel('pca-three')
+    plt.show()
+    #2-D Version of PCA with pyplot
+    # principalDf = pd.DataFrame(data = principalComponents, columns = ['principal component 1', 'principal component 2'])
+    # finalDf = pd.concat([principalDf, targets.attack_cat], axis = 1)
+    # fig = plt.figure(figsize = (8,8))
+    # ax = fig.add_subplot(1,1,1) 
+    # ax.set_xlabel('Principal Component 1', fontsize = 15)
+    # ax.set_ylabel('Principal Component 2', fontsize = 15)
+    # ax.set_title('2 component PCA', fontsize = 20)
+    # targets = data.attack_cat.unique().tolist()
+    # colors = ['r', 'b','k','g','y','c','m','#2f968a','#8943b5','#89b543']
+    # for target, color in zip(targets,colors):
+    #     indicesToKeep = finalDf['attack_cat'] == target
+    #     ax.scatter(finalDf.loc[indicesToKeep, 'principal component 1']
+    #             , finalDf.loc[indicesToKeep, 'principal component 2']
+    #             , c = color
+    #             , s = 25)
+    # ax.legend(targets)
+    # ax.grid()
+    # plt.show()
 def applyTSNE(data):
     stime = time.time()
     tsne = TSNE(n_components=2, verbose=1, perplexity=40, n_iter=300)
-    tsne_results = tsne.fit_transform(data)
-    print('t-SNE done! Time elapsed: {} seconds'.format(time.time()-stime))
+    features = data.drop(['Label','attack_cat'],axis=1)
 
+    tsne_results = tsne.fit_transform(features)
+    target = data.attack_cat
+    df_subset = pd.DataFrame()
+    df_subset['tsne-2d-one'] = tsne_results[:,0]
+    df_subset['tsne-2d-two'] = tsne_results[:,1]
+    plt.figure(figsize=(16,10))
+    sns.scatterplot(
+        x="tsne-2d-one", y="tsne-2d-two",
+        hue=target,
+        palette=sns.color_palette("hls", len(target.unique().tolist())),
+        data=df_subset,
+        legend="full",
+        alpha=0.3
+    )
+    
+    print('t-SNE done! Time elapsed: {} seconds'.format(time.time()-stime))
+    plt.show()
 #function to combine the 3 datasets into 1 main dataset
 def combine_datasets(data1, data2, data3):
     #read the files
@@ -116,25 +190,46 @@ def services(data):
     # plt.xlabel('Type of Service')
     # plt.title('Services Bar Plot')
     # plt.show()
+def deleteProtos(data):
+    df = pd.read_csv("ProtocolsExcluded.csv")
+    excluded = df[df.abnormal==0]
+    excluded = excluded.prot.tolist()
+    data = data.drop(data[(data.proto.isin(excluded))].index)
+    data = data.reset_index(drop=True)
+    write(data)
 def excludeProto(data):
     #prots to look at: unas arp ospf sctp icmp any
-    protosdf = pd.DataFrame(
+    new = data[['proto','Label']].copy()
+    new = new.astype({'Label': int})
+    protoList = data.proto.unique()
+    results = pd.DataFrame(
         {
-            "proto":["unas", "arp", "ospf", "sctp" ,"icmp","any"],
-            "normal":[0,0,0,0,0,0],
-            "abnormal":[0,0,0,0,0,0],
-            "excluded":[False,False,False,False,False,False]
+            "prot":protoList,
+            "normal":[len(new[(new.proto==proto)&(new.Label==0)]) for proto in protoList ],
+            "abnormal":[len(new[(new.proto==proto)&(new.Label==1)]) for proto in protoList ]
+            
         }
     )
-    for index,row in tqdm(data.iterrows(),total=data.shape[0]):
-        if int(row.Label)==0:
-            #normal
-            protosdf.loc[protosdf.proto==row.proto,'normal']+=1
-        else:
-            #abnormal
-            protosdf.loc[protosdf.proto==row.proto,'abnormal']+=1
-            protosdf.loc[protosdf.proto==row.proto,'excluded'] = False
-    protosdf.to_csv("ProtocolsExcluded.csv")
+    results.to_csv("ProtocolsExcluded.csv")
+
+    #old code that is useless
+    # protosdf = pd.DataFrame(
+    #     {
+    #         "proto":["unas", "arp", "ospf", "sctp" ,"icmp","any"],
+    #         "normal":[0,0,0,0,0,0],
+    #         "abnormal":[0,0,0,0,0,0],
+    #         "excluded":[False,False,False,False,False,False]
+    #     }
+    # )
+    # for index,row in tqdm(data.iterrows(),total=data.shape[0]):
+    #     if int(row.Label)==0:
+    #         #normal
+    #         protosdf.loc[protosdf.proto==row.proto,'normal']+=1
+    #     else:
+    #         #abnormal
+    #         protosdf.loc[protosdf.proto==row.proto,'abnormal']+=1
+    #         protosdf.loc[protosdf.proto==row.proto,'excluded'] = False
+    # protosdf.to_csv("ProtocolsExcluded.csv")
 def proto(data):
 
     general = data.shape[0] 
@@ -342,7 +437,16 @@ def attackCatPlot(data):
     numbers = attack.abnormal.tolist()
     total = sum(numbers)
     
+def looProto(data):
     
+    enc = LeaveOneOutEncoder(cols=['proto'], handle_unknown='impute', sigma=0.00, random_state=0)
+    X = pd.DataFrame(data.proto)
+    y = data.Label
+    result = enc.fit_transform(X=X,y=y)
+
+    data = data.drop(['proto'],axis=1)
+    data = data.join(result.loo_proto)
+    write(data)
 def excludePort(data):
 
     sports = data.sport.value_counts()
@@ -434,7 +538,36 @@ def excludePort(data):
 #     tar = pd.Series(data.Label.astype(int))
 #     test = pd.DataFrame(data.sport.astype(int))
 #     enc = category_encoders.target_encoder.TargetEncoder(verbose = 0, cols=['sport'])
+def oneHotServices(data):
 
+    df = pd.get_dummies(data.service,prefix="service")
+
+    data = data.drop(['service'],axis=1 )
+
+    data = data.join(df)
+    write(data)
+def oneHotStates(data):
+    df = pd.get_dummies(data.state,prefix="state")
+
+    data = data.drop(['state'],axis=1 )
+
+    data = data.join(df)
+    write(data)
+def removePorts(data):
+
+    dfs = pd.read_csv("SrcPorts.csv")
+    dfd = pd.read_csv("DestPorts.csv")
+    excludedSrc = dfs[dfs.abnormal==0]
+    excludedSrc = excludedSrc.sport.tolist()
+    data = data.drop(data[(data.sport.isin(excludedSrc))].index)
+    data = data.reset_index(drop=True)
+
+    excludedDst = dfd[dfd.abnormal==0]
+    excludedDst = excludedDst.dsport.tolist()
+    data = data.drop(data[(data.sport.isin(excludedSrc))].index)
+    data = data.reset_index(drop=True)
+    
+    write(data)
 def targetPort(data):
     #enc = LeaveOneOutEncoder(cols=['gender', 'country'], handle_unknown='impute', sigma=0.02, random_state=42)
     #the target is the label 0 or 1 Z|| 0 for normal and 1 for abnormal
@@ -443,17 +576,19 @@ def targetPort(data):
     test = pd.DataFrame([data.sport,data.dsport]).transpose()
     enc = LeaveOneOutEncoder(cols=['sport','dsport'], handle_unknown='impute', sigma=0.00, random_state=0)
     ports = enc.fit_transform(X=test,y=tar)
-    return pd.DataFrame([ports.loo_sport,ports.loo_dsport]).transpose()
+
+    new = pd.DataFrame([ports.loo_sport,ports.loo_dsport]).transpose()
+
+    data = data.drop(['sport'],axis=1 )
+    data = data.drop(['dsport'],axis=1)
+    data = data.join(new)
+    write(data)
 def transformIP (ip):
     groups = ip.split(".")
     equalize_group_length = "".join( map( lambda group: group.zfill(3), groups ))
     left_pad_with_zeros = list(( equalize_group_length ).zfill( IPV4_LENGTH ))[-3:]
     return left_pad_with_zeros
-def oneHotProtocol(data):
-    enc = OneHotEncoder()
-    encoded = enc.fit_transform(data.proto)
-    print (encoded)
-    return encoded
+
 def one_hot_ip(data):
     """
     Converts the ipAddress column of pandas DataFrame df, to one-hot
@@ -463,9 +598,33 @@ def one_hot_ip(data):
     #print (data.srcip.apply( lambda ip: transformIP(ip) ))
     ip_df = (data.srcip.apply( lambda ip: transformIP(ip) )).apply( pd.Series ) # creates separate columns for each char in IP
     X_ip = enc.fit_transform( ip_df )
-    print (X_ip.shape[1])
+    print (X_ip)
 
     return X_ip
+
+def onehotIP(data):
+    srcip = data.srcip.str.split(".",expand=True).astype(int)
+    dstip = data.dstip.str.split(".",expand=True).astype(int)
+
+    df = pd.get_dummies(srcip[3],prefix="sip")
+    df2= pd.get_dummies(dstip[3],prefix="dip")
+
+    data = data.drop(['srcip'],axis=1 )
+    data = data.drop(['dstip'],axis=1)
+
+    data = data.join(df2)
+    data = data.join(df)
+    write(data)
+    # label_encoder = LabelEncoder()
+    # integer_encoded = label_encoder.fit_transform(srcip[3])
+
+    # print (integer_encoded)
+
+    # onehot_encoder = OneHotEncoder()
+    # #integer_encoded = integer_encoded.reshape(len(integer_encoded), 1)
+    # onehot_encoded = onehot_encoder.fit_transform(integer_encoded)
+    # print (onehot_encoded)
+
 def analyzeIP(data):
     srcip = data.srcip.str.split(".", expand=True).astype(int)
     #dstip = data.dstip.str.split(".",expand = True)
@@ -509,16 +668,34 @@ def normalizeCounters(data,cnt):
     counter_normalized = pd.DataFrame(counter_scaled)
     return counter_normalized
 def plotTime(data):
-    temp = pd.to_numeric(data.Stime.value_counts().astype(int))
-    print (temp)
 
+
+
+
+
+    #the following is the code for just plotting hour of day
+    # temp = pd.to_numeric(data.Stime.value_counts().astype(int))
+    # print (temp)
+    new = data[['Stime','attack_cat']].copy()
+    attackList = data.attack_cat.unique()
+    
     dates = pd.to_datetime(data.Stime,unit='s') 
-    data.Stime = dates.dt.minute
-    data = data.astype({'Label': int})
-    test =  (data.Stime.value_counts())
-    test = test.sort_index()
-    test.plot(kind='bar')
+    new.Stime = dates.dt.minute
+    
+    # pivot_df = new.pivot(index='Stime', columns='attack_cat', values='Stime.value_counts()')
+    # print(pivot_df)
+    test5 = pd.crosstab(index=new['Stime'], columns=new['attack_cat'])  
+    #new = new.set_index('Stime')
+    #new = new.groupby('attack_cat')['Stime'].count()
+    test5.plot(kind='bar', stacked=True)
     plt.show()
+    # dates = pd.to_datetime(data.Stime,unit='s') 
+    # data.Stime = dates.dt.minute
+
+    # test =  (data.Stime.value_counts())
+    # test = test.sort_index()
+    # test.plot(kind='bar')
+    # plt.show()
 
     #test.get_xaxis().set_visible(False)
 
@@ -528,7 +705,11 @@ def plotTime(data):
     # ax.plot(temp) 
     # ax.get_xaxis().set_visible(False)
     # plt.show()   
-
+def convertToMin(data):
+    dates = pd.to_datetime(data.Stime,unit='s') 
+    data.Stime = dates.dt.minute
+    
+    write(data)
 def calcExcluded():
 
     sports = pd.read_csv("SrcPorts.csv")
@@ -555,7 +736,7 @@ def exampleTimeData(data):
 
 def write(data):
     if ROWS == 0:
-        data.to_csv("all_clean_data.csv")
+        data.to_csv("all_clean_data.csv",index=False)
     else:
         print ("Only {} were selected, cancelling operation...".format(ROWS))
 def allNormalize(data):
@@ -568,13 +749,15 @@ def allNormalize(data):
 
     data.ct_dst_ltm = normalizeCounters(data,"ct_dst_ltm").values
 
-    data.ct_src_ltm = normalizeCounters(data,"ct_src_ ltm").values
+    #this one was wrong might need to redo
+    data['ct_src_ ltm'] = normalizeCounters(data,"ct_src_ ltm").values
 
     data.ct_src_dport_ltm = normalizeCounters(data,"ct_src_dport_ltm").values
 
     data.ct_dst_sport_ltm = normalizeCounters(data,"ct_dst_sport_ltm").values
 
     data.ct_dst_src_ltm = normalizeCounters(data,"ct_dst_src_ltm").values
+    #write(data)
 
 def main():
     #read the features and labels and assign them 
@@ -582,11 +765,16 @@ def main():
 
     #read the data 0 to read all of it or use a custom number to read the first n rows of the data
     data = read_clean_data(clean,ROWS)
+    #data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
+    applyTSNE(data)
+    #print (data.apply(lambda s: pd.to_numeric(s, errors='coerce').notnull().all()).value_counts())
+    #looProto(data)
 
-    df = oneHotProtocol(data)
-    data = data.join(df)
-    print (df.shape[1])
-    write(data)
+    #allNormalize(data)
+    # df = oneHotProtocol(data)
+    # data = data.join(df)
+    # print (df.shape[1])
+    # write(data)
 
     #remove the added list of indices if we want (the first column that tags Unnamed)
     #data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
@@ -625,5 +813,5 @@ def main():
 if __name__ == '__main__':
     clean = "all_clean_data.csv"
     IPV4_LENGTH =12
-    ROWS = 0
+    ROWS = 100000
     main()
