@@ -196,7 +196,8 @@ def deleteProtos(data):
     excluded = excluded.prot.tolist()
     data = data.drop(data[(data.proto.isin(excluded))].index)
     data = data.reset_index(drop=True)
-    write(data)
+    return data
+    #write(data)
 def excludeProto(data):
     #prots to look at: unas arp ospf sctp icmp any
     new = data[['proto','Label']].copy()
@@ -442,11 +443,30 @@ def looProto(data):
     enc = LeaveOneOutEncoder(cols=['proto'], handle_unknown='impute', sigma=0.00, random_state=0)
     X = pd.DataFrame(data.proto)
     y = data.Label
+    
     result = enc.fit_transform(X=X,y=y)
 
     data = data.drop(['proto'],axis=1)
     data = data.join(result.loo_proto)
-    write(data)
+    return data
+    #write(data)
+
+def looIP(data,ipname):
+    ip = data[ipname].str.split(".",expand=True).astype(int)
+    names = [ipname+"net1",ipname+"net2",ipname+"host1",ipname+"host2"]
+    ip = ip.rename(columns={0:names[0],1:names[1],2:names[2],3:names[3]})
+    #dstip = data.dstip.str.split(".",expand=True).astype(int)
+
+    enc = LeaveOneOutEncoder(cols=[ipname+'net1',ipname+"host2"],handle_unknown='impute', sigma=0.0,random_state=0 )
+    X = pd.DataFrame([ip[ipname+"net1"],ip[ipname+"host2"]]).transpose()
+    y=data.Label
+
+    result = enc.fit_transform(X=X,y=y)
+    data.drop([ipname],axis=1, inplace= True)
+    new = pd.DataFrame([result["loo_"+ipname+"net1"],result["loo_"+ipname+"host2"]]).transpose()
+    data = data.join(new)
+    return data
+    #write(data)
 def excludePort(data):
 
     sports = data.sport.value_counts()
@@ -545,14 +565,16 @@ def oneHotServices(data):
     data = data.drop(['service'],axis=1 )
 
     data = data.join(df)
-    write(data)
+    return data
+    #write(data)
 def oneHotStates(data):
     df = pd.get_dummies(data.state,prefix="state")
 
     data = data.drop(['state'],axis=1 )
 
     data = data.join(df)
-    write(data)
+    return data
+    #write(data)
 def removePorts(data):
 
     dfs = pd.read_csv("SrcPorts.csv")
@@ -566,8 +588,9 @@ def removePorts(data):
     excludedDst = excludedDst.dsport.tolist()
     data = data.drop(data[(data.sport.isin(excludedSrc))].index)
     data = data.reset_index(drop=True)
-    
-    write(data)
+
+    return (data)
+    #write(data)    
 def targetPort(data):
     #enc = LeaveOneOutEncoder(cols=['gender', 'country'], handle_unknown='impute', sigma=0.02, random_state=42)
     #the target is the label 0 or 1 Z|| 0 for normal and 1 for abnormal
@@ -680,15 +703,15 @@ def plotTime(data):
     attackList = data.attack_cat.unique()
     
     dates = pd.to_datetime(data.Stime,unit='s') 
-    new.Stime = dates.dt.minute
+    new.Stime = dates.dt.hour
     
     # pivot_df = new.pivot(index='Stime', columns='attack_cat', values='Stime.value_counts()')
     # print(pivot_df)
-    test5 = pd.crosstab(index=new['Stime'], columns=new['attack_cat'])  
+    #test5 = pd.crosstab(index=new['Stime'], columns=new['attack_cat'])  
     #new = new.set_index('Stime')
     #new = new.groupby('attack_cat')['Stime'].count()
-    test5.plot(kind='bar', stacked=True)
-    plt.show()
+    #test5.plot(kind='bar', stacked=True)
+    #plt.show()
     # dates = pd.to_datetime(data.Stime,unit='s') 
     # data.Stime = dates.dt.minute
 
@@ -696,6 +719,7 @@ def plotTime(data):
     # test = test.sort_index()
     # test.plot(kind='bar')
     # plt.show()
+
 
     #test.get_xaxis().set_visible(False)
 
@@ -705,11 +729,19 @@ def plotTime(data):
     # ax.plot(temp) 
     # ax.get_xaxis().set_visible(False)
     # plt.show()   
-def convertToMin(data):
+def convertToMin(data,time):
     dates = pd.to_datetime(data.Stime,unit='s') 
     data.Stime = dates.dt.minute
     
-    write(data)
+    enc = LeaveOneOutEncoder(cols=[time], handle_unknown='impute', sigma=0.00, random_state=0)
+    X = pd.DataFrame(data[time])
+    y = data.Label
+    
+    result = enc.fit_transform(X=X,y=y)
+
+    data = data.drop([time],axis=1)
+    data = data.join(result["loo_"+time])
+    return data
 def calcExcluded():
 
     sports = pd.read_csv("SrcPorts.csv")
@@ -757,6 +789,41 @@ def allNormalize(data):
     data.ct_dst_sport_ltm = normalizeCounters(data,"ct_dst_sport_ltm").values
 
     data.ct_dst_src_ltm = normalizeCounters(data,"ct_dst_src_ltm").values
+    return data
+    #write(data)
+def checkTime(data):
+    new = data[['Stime','Label']]
+    dates = pd.to_datetime(data.Stime,unit='s') 
+    new.Stime = dates.dt.hour
+    final = new.drop(new[(new.Label==0)].index)
+    print (final.Stime.value_counts())
+# def convertTime(data):
+#     new = data[['Stime','attack_cat']].copy()
+#     dates = pd.to_datetime(data.Stime,unit='s') 
+#     new.Stime = dates.dt.hour
+def conversion(data):
+
+    data = data.drop(data[(data.state!="REQ")&~(data.state=="RST")&~(data.state=="FIN")&~(data.state=="CON")&~(data.state=="INT")].index)
+
+    data = removePorts(data)
+    data = deleteProtos(data)
+    #LeaveOneOut Encoding of the IP
+    ldata = ooIP(data,"srcip")
+    data = looIP(data,"dstip")
+
+    data = oneHotServices(data)
+    data = oneHotStates(data)
+    #LeaveOneOut encode of the protocol
+    data = looProto(data)
+    #normalize the counters
+    data = allNormalize(data)
+
+    #remove added indices columns
+    data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
+    data = data.apply(lambda s: pd.to_numeric(s, errors='coerce').notnull().all()).value_counts()
+
+    data = convertToMin(data,"Stime")
+    data = convertToMin(data,"Ltime")
     #write(data)
 
 def main():
@@ -766,7 +833,7 @@ def main():
     #read the data 0 to read all of it or use a custom number to read the first n rows of the data
     data = read_clean_data(clean,ROWS)
     #data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
-    applyTSNE(data)
+    
     #print (data.apply(lambda s: pd.to_numeric(s, errors='coerce').notnull().all()).value_counts())
     #looProto(data)
 
@@ -813,5 +880,5 @@ def main():
 if __name__ == '__main__':
     clean = "all_clean_data.csv"
     IPV4_LENGTH =12
-    ROWS = 100000
+    ROWS = 10
     main()
