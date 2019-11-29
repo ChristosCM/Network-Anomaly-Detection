@@ -298,7 +298,7 @@ def excludeWindow(data):
     )
     dwinres = pd.DataFrame(
         {
-            "swin":dwinlist,
+            "dwin":dwinlist,
             "normal":[len(new[(new.dwin==dwin)&(new.Label==0)]) for dwin in dwinlist ],
             "abnormal":[len(new[(new.dwin==dwin)&(new.Label==1)]) for dwin in dwinlist]
         }
@@ -614,7 +614,23 @@ def removePorts(data):
     data = data.reset_index(drop=True)
 
     return (data)
-    #write(data)    
+    #write(data) 
+def removeWindows(data):
+    # srcWin = pd.read_csv("Outputs/SwinExcluded.csv")
+    # dstWin = pd.read_csv("Outputs/DwinExcluded.csv")
+    # excludedSwin = srcWin[srcWin.abnormal==0]
+    # excludedSwin = srcWin.swin.tolist()
+    #data = data.drop(data[(data.swin.isin(excludedSwin))].index)
+    data = data.drop(data[(data.swin!=0)&(data.swin!=255)].index)
+    data = data.reset_index(drop=True)
+
+    data = data.drop(data[(data.dwin!=0)&(data.dwin!=255)].index)
+
+    # excludedDwin = dstWin[dstWin.abnormal==0]
+    # excludedDwin = dstWin.swin.tolist()
+    # data = data.drop(data[(data.dwin.isin(excludedDwin))].index)
+    # data = data.reset_index(drop=True)
+    return data
 def targetPort(data):
     #enc = LeaveOneOutEncoder(cols=['gender', 'country'], handle_unknown='impute', sigma=0.02, random_state=42)
     #the target is the label 0 or 1 Z|| 0 for normal and 1 for abnormal
@@ -714,6 +730,13 @@ def normalizeCounters(data,cnt):
     counter_scaled = min_max_scaler.fit_transform(counter)
     counter_normalized = pd.DataFrame(counter_scaled)
     return counter_normalized
+def replaceWindows(data):
+    cleanup={
+        "swin":{255:1},
+        "dwin":{255:1}
+    }
+    data.replace(cleanup,inplace=True)
+    return data
 def plotTime(data):
 
 
@@ -827,10 +850,16 @@ def checkTime(data):
 #     new.Stime = dates.dt.hour
 def conversion(data):
 
-    data = data.drop(data[(data.state!="REQ")&~(data.state=="RST")&~(data.state=="FIN")&~(data.state=="CON")&~(data.state=="INT")].index)
 
+    #remove the states
+    data = data.drop(data[(data.state!="REQ")&~(data.state=="RST")&~(data.state=="FIN")&~(data.state=="CON")&~(data.state=="INT")].index)
+    #remove protocols and ports from normal class
     data = removePorts(data)
     data = deleteProtos(data)
+
+    #remove unnecessary swin and dwin datapoints
+    data = removeWindows(data)
+    data = replaceWindows(data)
     #LeaveOneOut Encoding of the IP
     data = looIP(data,"srcip")
     data = looIP(data,"dstip")
@@ -853,19 +882,33 @@ def conversion(data):
     #remove added indices columns
     data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
 
-    print (data)
-    #write(data)
+    write(data)
 
+def genSample(data):
+    #firstly move all the sub attack categories in the sample
+    df = pd.DataFrame(data[(data.attack_cat!="Generic")&(data.Label==1)])
+    #df.reset_index(inplace=True)
+    normGen = pd.DataFrame(data[(data.attack_cat=="Generic")|(data.Label==0)])
+    normGen = normGen.sample(frac=0.1,random_state=1)
+    #normGen.reset_index(inplace=True)
+    df = pd.concat([df,normGen],ignore_index=True)
+
+    df = df.fillna(0)
+
+    return df
 def main():
     #read the features and labels and assign them 
     #labels =  read_features().Name
 
     #read the data 0 to read all of it or use a custom number to read the first n rows of the data
     data = read_clean_data(clean,ROWS)
-    
-    excludeWindow(data)
 
-    #conversion(data)
+    sample = genSample(data)
+
+    #applyPCA(sample)
+    sample = sample.sample(n=100000,random_state=1)
+
+    applyTSNE(sample)
     #data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
     
     #print (data.apply(lambda s: pd.to_numeric(s, errors='coerce').notnull().all()).value_counts())
