@@ -9,7 +9,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
-
+from sklearn.preprocessing import MinMaxScaler
 from category_encoders import *
 from loo_encoder.encoder import LeaveOneOutEncoder
 import seaborn as sns
@@ -19,6 +19,8 @@ from matplotlib.animation import FuncAnimation
 #library to show progress bar in for loops
 from tqdm import tqdm
 
+#VARIABLES FOR PANDAS
+#pd.set_option('display.max_columns', 500)
 #library to make a 3D plot
 # from mpl_toolkits.mplot3d import Axes3D
 def read_features():
@@ -269,8 +271,7 @@ def excludeService(data):
 def excludeState(data):
     new = data[['state','Label']].copy()
     new = new.astype({'Label': int})
-    print((len(new[new.state=="URH"])))
-    return None
+    
     stateList = data.state.unique()
     results = pd.DataFrame(
         {
@@ -281,6 +282,29 @@ def excludeState(data):
         }
     )
     results.to_csv("StatesExcluded.csv")
+def excludeWindow(data):
+    new = data[['swin','dwin','Label']].copy()
+    new = new.astype({'Label': int})
+
+    swinlist = data.swin.unique()
+    dwinlist = data.dwin.unique()
+
+    swinres = pd.DataFrame(
+        {
+            "swin":swinlist,
+            "normal":[len(new[(new.swin==swin)&(new.Label==0)]) for swin in swinlist ],
+            "abnormal":[len(new[(new.swin==swin)&(new.Label==1)]) for swin in swinlist]
+        }
+    )
+    dwinres = pd.DataFrame(
+        {
+            "swin":dwinlist,
+            "normal":[len(new[(new.dwin==dwin)&(new.Label==0)]) for dwin in dwinlist ],
+            "abnormal":[len(new[(new.dwin==dwin)&(new.Label==1)]) for dwin in dwinlist]
+        }
+    )
+    swinres.to_csv("Outputs/SwinExcluded.csv")
+    dwinres.to_csv("Outputs/DwinExcluded.csv")
 def states(data):
     
     req = [0,0, "REQ"]
@@ -605,7 +629,7 @@ def targetPort(data):
     data = data.drop(['sport'],axis=1 )
     data = data.drop(['dsport'],axis=1)
     data = data.join(new)
-    write(data)
+    return data
 def transformIP (ip):
     groups = ip.split(".")
     equalize_group_length = "".join( map( lambda group: group.zfill(3), groups ))
@@ -686,7 +710,7 @@ def normalizeCounters(data,cnt):
     data = data.astype({cnt: int})
 
     counter = data[[cnt]].values.astype(int) 
-    min_max_scaler = preprocessing.MinMaxScaler()
+    min_max_scaler = MinMaxScaler()
     counter_scaled = min_max_scaler.fit_transform(counter)
     counter_normalized = pd.DataFrame(counter_scaled)
     return counter_normalized
@@ -730,8 +754,8 @@ def plotTime(data):
     # ax.get_xaxis().set_visible(False)
     # plt.show()   
 def convertToMin(data,time):
-    dates = pd.to_datetime(data.Stime,unit='s') 
-    data.Stime = dates.dt.minute
+    dates = pd.to_datetime(data[time],unit='s') 
+    data[time] = dates.dt.minute
     
     enc = LeaveOneOutEncoder(cols=[time], handle_unknown='impute', sigma=0.00, random_state=0)
     X = pd.DataFrame(data[time])
@@ -808,22 +832,28 @@ def conversion(data):
     data = removePorts(data)
     data = deleteProtos(data)
     #LeaveOneOut Encoding of the IP
-    ldata = ooIP(data,"srcip")
+    data = looIP(data,"srcip")
     data = looIP(data,"dstip")
 
     data = oneHotServices(data)
     data = oneHotStates(data)
     #LeaveOneOut encode of the protocol
     data = looProto(data)
+
+    #encode the ports with LOO
+    data = targetPort(data)
     #normalize the counters
-    data = allNormalize(data)
+    #already done
+    #data = allNormalize(data)
+    
+    #convert the timestamps of Stime and Ltime into Minutes of hour
+    data = convertToMin(data,"Stime")
+    data = convertToMin(data,"Ltime")
 
     #remove added indices columns
     data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
-    data = data.apply(lambda s: pd.to_numeric(s, errors='coerce').notnull().all()).value_counts()
 
-    data = convertToMin(data,"Stime")
-    data = convertToMin(data,"Ltime")
+    print (data)
     #write(data)
 
 def main():
@@ -832,6 +862,10 @@ def main():
 
     #read the data 0 to read all of it or use a custom number to read the first n rows of the data
     data = read_clean_data(clean,ROWS)
+    
+    excludeWindow(data)
+
+    #conversion(data)
     #data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
     
     #print (data.apply(lambda s: pd.to_numeric(s, errors='coerce').notnull().all()).value_counts())
@@ -880,5 +914,5 @@ def main():
 if __name__ == '__main__':
     clean = "all_clean_data.csv"
     IPV4_LENGTH =12
-    ROWS = 10
+    ROWS = 0
     main()
