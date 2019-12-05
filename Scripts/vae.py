@@ -1,6 +1,3 @@
-''' This code contains the implementation of conditional VAE
-
-'''
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -10,9 +7,9 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 import matplotlib.pyplot as plt
+import pandas as pd
 
-device = torch.device('cuda')
-
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 BATCH_SIZE = 64         # number of data points in each batch
 N_EPOCHS = 10           # times to run the model on complete data
 INPUT_DIM = 28 * 28     # size of each input
@@ -21,53 +18,43 @@ LATENT_DIM = 75         # latent vector dimension
 N_CLASSES = 10          # number of classes in the data
 lr = 1e-3               # learning rate
 
+def genSample(data):
+    #firstly move all the sub attack categories in the sample
+    df = pd.DataFrame(data[(data.attack_cat!="Generic")&(data.Label==1)])
+    #df.reset_index(inplace=True)
+    normGen = pd.DataFrame(data[(data.attack_cat=="Generic")|(data.Label==0)])
+    normGen = normGen.sample(frac=0.1,random_state=1)
+    #normGen.reset_index(inplace=True)
+    df = pd.concat([df,normGen],ignore_index=True)
+
+    df = df.fillna(0)
+
+    return df
+
+
 transforms = transforms.Compose([transforms.ToTensor()])
-train_dataset = datasets.MNIST(
-    './data',
-    train=True,
-    download=True,
-    transform=transforms)
 
-test_dataset = datasets.MNIST(
-    './data',
-    train=False,
-    download=True,
-    transform=transforms
-)
-
-train_iterator = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-test_iterator = DataLoader(test_dataset, batch_size=BATCH_SIZE)
+df = pd.read_csv("all_clean_data.csv")
+df = genSample(df)
+train_set = df.sample(frac=0.75,random_state=0)
+test_set = df.drop(train_set.index)
 
 
-def idx2onehot(idx, n=N_CLASSES):
-
-    assert idx.shape[1] == 1
-    assert torch.max(idx).item() < n
-
-    onehot = torch.zeros(idx.size(0), n)
-    onehot.scatter_(1, idx.data, 1)
-
-    return onehot
-
-
+train_iterator = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True)
+test_iterator = DataLoader(test_set, batch_size=BATCH_SIZE)
 class Encoder(nn.Module):
-    ''' This the encoder part of VAE
 
-    '''
-    def __init__(self, input_dim, hidden_dim, latent_dim, n_classes):
+    def __init__(self,input_dim,hidden_dim,latent_dim,n_classes):
         '''
-        Args:
             input_dim: A integer indicating the size of input (in case of MNIST 28 * 28).
             hidden_dim: A integer indicating the size of hidden dimension.
             latent_dim: A integer indicating the latent size.
             n_classes: A integer indicating the number of classes. (dimension of one-hot representation of labels)
         '''
         super().__init__()
-
         self.linear = nn.Linear(input_dim + n_classes, hidden_dim)
         self.mu = nn.Linear(hidden_dim, latent_dim)
         self.var = nn.Linear(hidden_dim, latent_dim)
-
     def forward(self, x):
         # x is of shape [batch_size, input_dim + n_classes]
 
@@ -81,8 +68,6 @@ class Encoder(nn.Module):
         # log_var is of shape [batch_size, latent_dim]
 
         return mean, log_var
-
-
 class Decoder(nn.Module):
     ''' This the decoder part of VAE
 
@@ -108,8 +93,6 @@ class Decoder(nn.Module):
         # x is of shape [batch_size, output_dim]
 
         return generated_x
-
-
 class CVAE(nn.Module):
     ''' This the VAE, which takes a encoder and decoder.
 
@@ -146,8 +129,9 @@ class CVAE(nn.Module):
         generated_x = self.decoder(z)
 
         return generated_x, z_mu, z_var
-
-
+model = CVAE(INPUT_DIM, HIDDEN_DIM, LATENT_DIM, N_CLASSES)
+optimizer = optim.Adam(model.parameters(), lr=lr)
+#calculate the total loss which is the sum of the recostruction loss and the kl divergence
 def calculate_loss(x, reconstructed_x, mean, log_var):
     # reconstruction loss
     RCL = F.binary_cross_entropy(reconstructed_x, x, size_average=False)
@@ -155,11 +139,6 @@ def calculate_loss(x, reconstructed_x, mean, log_var):
     KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
 
     return RCL + KLD
-
-model = CVAE(INPUT_DIM, HIDDEN_DIM, LATENT_DIM, N_CLASSES)
-optimizer = optim.Adam(model.parameters(), lr=lr)
-
-
 def train():
     # set the train mode
     model.train()
@@ -172,8 +151,7 @@ def train():
         x = x.view(-1, 28 * 28)
         x = x.to(device)
 
-        # convert y into one-hot encoding
-        y = idx2onehot(y.view(-1, 1))
+        y = y.view(-1, 1)
         y = y.to(device)
 
         # update the gradients to zero
@@ -193,8 +171,6 @@ def train():
         optimizer.step()
 
     return train_loss
-
-
 def test():
     # set the evaluation mode
     model.eval()
@@ -209,8 +185,7 @@ def test():
             x = x.view(-1, 28 * 28)
             x = x.to(device)
 
-            # convert y into one-hot encoding
-            y = idx2onehot(y.view(-1, 1))
+            y = y.view(-1, 1)
             y = y.to(device)
 
             # forward pass
@@ -221,41 +196,39 @@ def test():
             test_loss += loss.item()
 
     return test_loss
-
 best_test_loss = float('inf')
 
-for e in range(N_EPOCHS):
+def start():
+    for e in range(N_EPOCHS):
 
-    train_loss = train()
-    test_loss = test()
+        train_loss = train()
+        test_loss = test()
 
-    train_loss /= len(train_dataset)
-    test_loss /= len(test_dataset)
+        train_loss /= len(train)
+        test_loss /= len(test)
 
-    print(f'Epoch {e}, Train Loss: {train_loss:.2f}, Test Loss: {test_loss:.2f}')
+        print(f'Epoch {e}, Train Loss: {train_loss:.2f}, Test Loss: {test_loss:.2f}')
 
-    if best_test_loss > test_loss:
-        best_test_loss = test_loss
-        patience_counter = 1
-    else:
-        patience_counter += 1
+        if best_test_loss > test_loss:
+            best_test_loss = test_loss
+            patience_counter = 1
+        else:
+            patience_counter += 1
 
-    if patience_counter > 3:
-        break
+        if patience_counter > 3:
+            break
 
-# create a random latent vector
-z = torch.randn(1, LATENT_DIM).to(device)
+    #create latent random vector
+    z = torch.randn(1, LATENT_DIM).to(device)        
+    #pick the class for which to generate data for
+    y = torch.randint(0, N_CLASSES, (1, 1)).to(dtype=torch.long)
+    print(f'Generating a {y.item()}')
 
-# pick randomly 1 class, for which we want to generate the data
-y = torch.randint(0, N_CLASSES, (1, 1)).to(dtype=torch.long)
-print(f'Generating a {y.item()}')
+    y = y.to(device,dtype=z.dtype)
+    z=torch.cat((z,y),dim=1)
 
-y = idx2onehot(y).to(device, dtype=z.dtype)
-z = torch.cat((z, y), dim=1)
+    recon = model.decoder(z)
+    print (recon)
 
-reconstructed_img = model.decoder(z)
-img = reconstructed_img.view(28, 28).data
-
-plt.figure()
-plt.imshow(img, cmap='gray')
-plt.show()
+if __name__=="__main__":
+    start()

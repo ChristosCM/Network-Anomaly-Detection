@@ -19,6 +19,15 @@ from matplotlib.animation import FuncAnimation
 #library to show progress bar in for loops
 from tqdm import tqdm
 
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #VARIABLES FOR PANDAS
 #pd.set_option('display.max_columns', 500)
 #library to make a 3D plot
@@ -776,6 +785,21 @@ def plotTime(data):
     # ax.plot(temp) 
     # ax.get_xaxis().set_visible(False)
     # plt.show()   
+def convertToHour(data,time):
+    dates = pd.to_datetime(data[time],unit='s') 
+    data[time] = dates.dt.hour
+    
+    enc = LeaveOneOutEncoder(cols=[time], handle_unknown='impute', sigma=0.00, random_state=0)
+    X = pd.DataFrame(data[time])
+    y = data.Label
+    
+    result = enc.fit_transform(X=X,y=y)
+
+    data = data.drop([time],axis=1)
+    data = data.join(result["loo_"+time])
+    data.rename(columns={"loo_"+time:"loo_"+time+"Hour"},inplace=True)
+    print (data.head())
+    return data
 def convertToMin(data,time):
     dates = pd.to_datetime(data[time],unit='s') 
     data[time] = dates.dt.minute
@@ -786,8 +810,10 @@ def convertToMin(data,time):
     
     result = enc.fit_transform(X=X,y=y)
 
-    data = data.drop([time],axis=1)
+    #data = data.drop([time],axis=1)
     data = data.join(result["loo_"+time])
+    data.rename(columns={"loo_"+time:"loo_"+time+"Min"},inplace=True)
+    print (data)
     return data
 def calcExcluded():
 
@@ -849,28 +875,49 @@ def checkTime(data):
 #     dates = pd.to_datetime(data.Stime,unit='s') 
 #     new.Stime = dates.dt.hour
 def conversion(data):
-
-
+    count = [data.shape[0]]
     #remove the states
+    data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
+    cols = [data.shape[1]]
+
     data = data.drop(data[(data.state!="REQ")&~(data.state=="RST")&~(data.state=="FIN")&~(data.state=="CON")&~(data.state=="INT")].index)
+    
+    count.append(data.shape[0])
     #remove protocols and ports from normal class
     data = removePorts(data)
+    
+    count.append(data.shape[0])
+
     data = deleteProtos(data)
+
+    count.append(data.shape[0])
 
     #remove unnecessary swin and dwin datapoints
     data = removeWindows(data)
+    count.append(data.shape[0])
     data = replaceWindows(data)
+
+
     #LeaveOneOut Encoding of the IP
     data = looIP(data,"srcip")
+    cols.append(data.shape[1])  
+
     data = looIP(data,"dstip")
+    cols.append(data.shape[1])  
 
     data = oneHotServices(data)
+    
+    cols.append(data.shape[1])  
+    
     data = oneHotStates(data)
+    cols.append(data.shape[1])
+
     #LeaveOneOut encode of the protocol
     data = looProto(data)
 
     #encode the ports with LOO
     data = targetPort(data)
+
     #normalize the counters
     #already done
     #data = allNormalize(data)
@@ -879,11 +926,26 @@ def conversion(data):
     data = convertToMin(data,"Stime")
     data = convertToMin(data,"Ltime")
 
+    data = convertToHour(data,"Stime")
+    data = convertToHour(data,"Ltime")
     #remove added indices columns
     data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
 
     write(data)
+    sns.set(style="darkgrid")
 
+    ax = sns.scatterplot(x=["Original","States","Ports","Protocols","Windows"],y=count)
+    plt.show()
+    ax=sns.scatterplot(x=["Original","SrcIP","DstIP","Services","States"],y=cols)
+    plt.show()
+def calcExcPorts():
+    src = pd.read_csv("Outputs/SrcPorts.csv",)
+    dst = pd.read_csv("Outputs/DestPorts.csv")
+    
+
+    excsrc = dst[dst.abnormal==0]
+    print(excsrc)
+    print(excsrc.normal.sum())
 def genSample(data):
     #firstly move all the sub attack categories in the sample
     df = pd.DataFrame(data[(data.attack_cat!="Generic")&(data.Label==1)])
@@ -896,6 +958,37 @@ def genSample(data):
     df = df.fillna(0)
 
     return df
+# def vae(train,test):
+#     #definition of parameters for VAE
+#     BATCH_SIZE = 64         # number of data points in each batch
+#     N_EPOCHS = 10           # times to run the model on complete data
+#     INPUT_DIM = 28 * 28     # size of each input
+#     HIDDEN_DIM = 256        # hidden dimension
+#     LATENT_DIM = 75         # latent vector dimension
+#     N_CLASSES = 10          # number of classes in the data
+#     lr = 1e-3               # learning rate
+#     train_iterator = DataLoader(train, batch_size=BATCH_SIZE, shuffle=True)
+#     test_iterator = DataLoader(test, batch_size=BATCH_SIZE)
+
+#     for e in range(N_EPOCHS):
+
+#     train_loss = train()
+#     test_loss = test()
+
+#     train_loss /= len(train_dataset)
+#     test_loss /= len(test_dataset)
+
+#     print(f'Epoch {e}, Train Loss: {train_loss:.2f}, Test Loss: {test_loss:.2f}')
+
+#     if best_test_loss > test_loss:
+#         best_test_loss = test_loss
+#         patience_counter = 1
+#     else:
+#         patience_counter += 1
+
+#     if patience_counter > 3:
+#         break
+
 def main():
     #read the features and labels and assign them 
     #labels =  read_features().Name
@@ -903,12 +996,15 @@ def main():
     #read the data 0 to read all of it or use a custom number to read the first n rows of the data
     data = read_clean_data(clean,ROWS)
 
-    sample = genSample(data)
+    print (data.shape)
+    #conversion(data)
 
-    #applyPCA(sample)
-    sample = sample.sample(n=100000,random_state=1)
+    # sample = genSample(data)
 
-    applyTSNE(sample)
+    # #applyPCA(sample)
+    # sample = sample.sample(n=100000,random_state=1)
+
+    # applyTSNE(sample)
     #data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
     
     #print (data.apply(lambda s: pd.to_numeric(s, errors='coerce').notnull().all()).value_counts())
