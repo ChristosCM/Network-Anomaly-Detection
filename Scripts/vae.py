@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 BATCH_SIZE = 64         # number of data points in each batch
 N_EPOCHS = 10           # times to run the model on complete data
 INPUT_DIM = 28 * 28     # size of each input
@@ -20,12 +21,15 @@ lr = 1e-3               # learning rate
 
 def genSample(data):
     #firstly move all the sub attack categories in the sample
-    df = pd.DataFrame(data[(data.attack_cat!="Generic")&(data.Label==1)])
+    df = pd.DataFrame(data[(data.attack_cat!="Generic")&(data.attack_cat!="Exploits")&(data.attack_cat!="Fuzzers")&(data.Label==1)])
     #df.reset_index(inplace=True)
-    normGen = pd.DataFrame(data[(data.attack_cat=="Generic")|(data.Label==0)])
-    normGen = normGen.sample(frac=0.1,random_state=1)
+    notNorm = pd.DataFrame(data[(data.attack_cat=="Generic")|(data.attack_cat=="Exploits")|(data.attack_cat=="Fuzzers")]) #hold just normal data and Generic attack categories
+    notNorm = notNorm.sample(frac=0.1,random_state=1) #sample the normal data to be put back
+
+    normGen = pd.DataFrame(data[(data.Label==0)])
+    normGen = normGen.sample(frac=0.05,random_state=1)
     #normGen.reset_index(inplace=True)
-    df = pd.concat([df,normGen],ignore_index=True)
+    df = pd.concat([df,normGen,notNorm],ignore_index=True)
 
     df = df.fillna(0)
 
@@ -35,8 +39,10 @@ def genSample(data):
 transforms = transforms.Compose([transforms.ToTensor()])
 
 df = pd.read_csv("all_clean_data.csv")
-df = genSample(df)
-train_set = df.sample(frac=0.75,random_state=0)
+
+df = genSample(df) #split now is 60(norm)-40(abnorm) with around 175,000 data points (still a lot for PC)
+
+train_set = df.sample(frac=0.75,random_state=1)
 test_set = df.drop(train_set.index)
 
 

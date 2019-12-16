@@ -131,7 +131,7 @@ def applyPCA(data):
     # plt.show()
 def applyTSNE(data):
     stime = time.time()
-    tsne = TSNE(n_components=2, verbose=1, perplexity=40, n_iter=300)
+    tsne = TSNE(n_components=2, verbose=1, perplexity=25, n_iter=5000)
     features = data.drop(['Label','attack_cat'],axis=1)
 
     tsne_results = tsne.fit_transform(features)
@@ -878,67 +878,74 @@ def conversion(data):
     count = [data.shape[0]]
     #remove the states
     data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
-    cols = [data.shape[1]]
+    #cols = [data.shape[1]]
 
     data = data.drop(data[(data.state!="REQ")&~(data.state=="RST")&~(data.state=="FIN")&~(data.state=="CON")&~(data.state=="INT")].index)
-    
-    count.append(data.shape[0])
+    print ("Removed states...")
+    #count.append(data.shape[0])
     #remove protocols and ports from normal class
-    data = removePorts(data)
-    
-    count.append(data.shape[0])
+    #data = removePorts(data) don't remove the ports as we lose too much data/information if so 
+    data.drop(["Ltime"],axis=1,inplace=True) #remove the Ltime as we have Stime and duration so its not improtant
+    print ("Ltime dropped...")
+    #count.append(data.shape[0])
 
     data = deleteProtos(data)
-
-    count.append(data.shape[0])
+    print ("Protocols Deleted...")
+    #count.append(data.shape[0])
 
     #remove unnecessary swin and dwin datapoints
     data = removeWindows(data)
-    count.append(data.shape[0])
+    print ("Windows removed...")
+    #count.append(data.shape[0])
     data = replaceWindows(data)
-
+    print ("Windows encoded...")
 
     #LeaveOneOut Encoding of the IP
     data = looIP(data,"srcip")
-    cols.append(data.shape[1])  
+    print ("Source IPs encoded...")
+    #cols.append(data.shape[1])  
 
     data = looIP(data,"dstip")
-    cols.append(data.shape[1])  
+    print ("Destination IPs encoded...")
+    
+    #cols.append(data.shape[1])  
 
     data = oneHotServices(data)
-    
-    cols.append(data.shape[1])  
+    print ("Services Encoded...")
+    #cols.append(data.shape[1])  
     
     data = oneHotStates(data)
-    cols.append(data.shape[1])
+    print ("States Encoded...")
+    #cols.append(data.shape[1])
 
     #LeaveOneOut encode of the protocol
     data = looProto(data)
-
+    print ("Protocols encoded...")
     #encode the ports with LOO
     data = targetPort(data)
-
+    print ("Ports encoded")
     #normalize the counters
     #already done
     #data = allNormalize(data)
     
     #convert the timestamps of Stime and Ltime into Minutes of hour
     data = convertToMin(data,"Stime")
-    data = convertToMin(data,"Ltime")
+    #data = convertToMin(data,"Ltime") Ltime removed
 
     data = convertToHour(data,"Stime")
-    data = convertToHour(data,"Ltime")
+    print ("Stime timestamp encoded in minute and hour")
+    #data = convertToHour(data,"Ltime") Ltime removed
     #remove added indices columns
     data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
+    write(data) #write data to file
 
-    write(data)
-    sns.set(style="darkgrid")
-
-    ax = sns.scatterplot(x=["Original","States","Ports","Protocols","Windows"],y=count)
-    plt.show()
-    ax=sns.scatterplot(x=["Original","SrcIP","DstIP","Services","States"],y=cols)
-    plt.show()
-def calcExcPorts():
+    #functions to realise reduction in data
+    # sns.set(style="darkgrid")
+    # ax = sns.scatterplot(x=["Original","States","Ports","Protocols","Windows"],y=count)
+    # plt.show()
+    # ax=sns.scatterplot(x=["Original","SrcIP","DstIP","Services","States"],y=cols)
+    # plt.show()
+def calcExcPorts(): #function that reads generated data and calculates how many data points are to be removed that contain just normal behaviour
     src = pd.read_csv("Outputs/SrcPorts.csv",)
     dst = pd.read_csv("Outputs/DestPorts.csv")
     
@@ -947,13 +954,16 @@ def calcExcPorts():
     print(excsrc)
     print(excsrc.normal.sum())
 def genSample(data):
-    #firstly move all the sub attack categories in the sample
-    df = pd.DataFrame(data[(data.attack_cat!="Generic")&(data.Label==1)])
+     #firstly move all the sub attack categories in the sample
+    df = pd.DataFrame(data[(data.attack_cat!="Generic")&(data.attack_cat!="Exploits")&(data.attack_cat!="Fuzzers")&(data.Label==1)])
     #df.reset_index(inplace=True)
-    normGen = pd.DataFrame(data[(data.attack_cat=="Generic")|(data.Label==0)])
-    normGen = normGen.sample(frac=0.1,random_state=1)
+    notNorm = pd.DataFrame(data[(data.attack_cat=="Generic")|(data.attack_cat=="Exploits")|(data.attack_cat=="Fuzzers")]) #hold just normal data and Generic attack categories
+    notNorm = notNorm.sample(frac=0.1,random_state=1) #sample the normal data to be put back
+
+    normGen = pd.DataFrame(data[(data.Label==0)])
+    normGen = normGen.sample(frac=0.05,random_state=1)
     #normGen.reset_index(inplace=True)
-    df = pd.concat([df,normGen],ignore_index=True)
+    df = pd.concat([df,normGen,notNorm],ignore_index=True)
 
     df = df.fillna(0)
 
@@ -995,16 +1005,12 @@ def main():
 
     #read the data 0 to read all of it or use a custom number to read the first n rows of the data
     data = read_clean_data(clean,ROWS)
-
     print (data.shape)
-    #conversion(data)
+    #sample = genSample(data)
+    #sample = sample.sample(n=100000,random_state=1)
+    # applyPCA(sample)
 
-    # sample = genSample(data)
-
-    # #applyPCA(sample)
-    # sample = sample.sample(n=100000,random_state=1)
-
-    # applyTSNE(sample)
+    #applyTSNE(sample)
     #data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
     
     #print (data.apply(lambda s: pd.to_numeric(s, errors='coerce').notnull().all()).value_counts())
