@@ -4,7 +4,7 @@ import numpy as np
 import scipy
 import tensorflow as tf
 from keras.layers import Lambda, Input, Dense, Activation
-from keras.models import Model, Sequential
+from keras.models import Model, Sequential, model_from_json
 # from keras.datasets import mnist
 from keras.losses import mse, binary_crossentropy
 from keras.utils import plot_model
@@ -44,6 +44,7 @@ df = genSample(df) #split now is 60(norm)-40(abnorm) with around 175,000 data po
 sam = df.sample(10,random_state=1)
 saml=sam.pop("Label")
 samc=sam.pop("attack_cat")
+
 label = df.pop("Label")
 cat = df.pop("attack_cat")
 #normalize between 0 and 1 maybe to fix loss
@@ -128,12 +129,30 @@ def vae_loss(x, x_decoded_mean):
 vae.compile(optimizer=OPTIMIZER, loss=vae_loss)
 
 # Finally, we train the model:
-results = vae.fit(x_train, x_train,
+results = vae.fit(x_train, trainLabel,
         shuffle=True,
         epochs=epochs,
         batch_size=batch_size,
-        validation_data=(x_test, x_test))
+        validation_data=(x_test, testLabel))
+def saveModel(model, name):
+    modelJson = model.to_json()
+    nameJSON=str(name)+".json"
+    nameH5 = str(name)+".h5"
+    with open(nameJSON,"w")as jsonF:
+        jsonF.write(modelJson)
+    #seraialize the wirghts to HDF5
+    model.save_weights(nameH5)
+    print("Model {} has been saved to disk".format(name))
 
+def loasModel(name):
+    nameJSON=str(name)+".json"
+    nameH5 = str(name)+".h5"
+    jsonFile = open(nameJSON,"r")
+    loadedModel = jsonFile.read()
+    jsonFile.close()
+    loadedModel = model_from_json(loadedModel)
+    loadedModel.load_weights(nameH5)
+    return loadedModel
 def plotLoss():
     plt.plot(results.history['loss'])
     plt.plot(results.history['val_loss'])
