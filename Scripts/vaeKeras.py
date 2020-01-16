@@ -2,13 +2,14 @@ import os
 import pandas as pd
 import numpy as np
 import scipy
-
-from keras.layers import Lambda, Input, Dense
-from keras.models import Model
-from keras.datasets import mnist
+import tensorflow as tf
+from keras.layers import Lambda, Input, Dense, Activation
+from keras.models import Model, Sequential
+# from keras.datasets import mnist
 from keras.losses import mse, binary_crossentropy
 from keras.utils import plot_model
 from keras import backend as K
+import seaborn as sns
 
 import matplotlib.pyplot as plt
 import argparse
@@ -17,6 +18,8 @@ from numpy.random import seed
 from sklearn import preprocessing
 from sklearn.preprocessing import minmax_scale
 from sklearn.model_selection import train_test_split
+from sklearn.manifold import TSNE
+
 from keras import losses
 import sys
 def genSample(data):#function to generate sample for the autoencoder
@@ -38,7 +41,9 @@ def genSample(data):#function to generate sample for the autoencoder
 df = pd.read_csv("all_clean_data.csv")
 
 df = genSample(df) #split now is 60(norm)-40(abnorm) with around 175,000 data points (still a lot for PC)
-
+sam = df.sample(10,random_state=1)
+saml=sam.pop("Label")
+samc=sam.pop("attack_cat")
 label = df.pop("Label")
 cat = df.pop("attack_cat")
 #normalize between 0 and 1 maybe to fix loss
@@ -47,17 +52,19 @@ min_max_scaler = preprocessing.MinMaxScaler()
 x_scaled = min_max_scaler.fit_transform(x)
 df = pd.DataFrame(x_scaled)
 
-train_set = df.sample(frac=0.7,random_state=1)
-test_set = df.drop(train_set.index)
-x_train = train_set
-x_test = test_set
+x_train = df.sample(frac=0.7)#,random_state=0)
+x_test = df.drop(x_train.index)
+x_test = x_test.reset_index(drop=True)
+trainLabel = label.sample(frac=0.7)
+testLabel=label.drop(trainLabel.index)
+
 # Setup the network parameters:
 original_dim = x_train.shape[1]
 input_shape = (original_dim, )
 intermediate_dim = 50
 batch_size = 128
 latent_dim = 2
-epochs = 10
+epochs = 100
 OPTIMIZER = "adadelta"
 ENC_ACTIVATION = "relu"
 DEC_ACTIVATION = "relu"
@@ -93,24 +100,24 @@ def sampling(args):
 # note that "output_shape" isn't necessary with the TensorFlow backend
 z = Lambda(sampling, output_shape=(latent_dim,), name='z')([z_mean, z_log_var])
 
+
 # Instantiate the encoder model:
 encoder = Model(inputs, z_mean)
-encoder.summary() #print summary of variables
-plot_model(encoder, to_file='vae_mlp_encoder.png', show_shapes=True)
+# encoder.summary() #print summary of variables
+ #plot_model(encoder, to_file='vae_mlp_encoder.png', show_shapes=True)
 # Build the decoder model:
 latent_inputs = Input(shape=(latent_dim,), name='z_sampling')
 x = Dense(intermediate_dim, activation=DEC_ACTIVATION)(latent_inputs)
 outputs = Dense(original_dim, activation=OUT_ACTIVATION)(x)
-
 # Instantiate the decoder model:
 decoder = Model(latent_inputs, outputs, name='decoder')
-decoder.summary()
-plot_model(decoder, to_file='vae_mlp_decoder.png', show_shapes=True)
+# decoder.summary()
+ #plot_model(decoder, to_file='vae_mlp_decoder.png', show_shapes=True)
 
 # Instantiate the VAE model:
 outputs = decoder(encoder(inputs))
 vae = Model(inputs, outputs, name='vae_mlp')
-plot_model(vae,to_file='vae_mlp.png',show_shapes=True)
+ #plot_model(vae,to_file='vae_mlp.png',show_shapes=True)
 # As in the Keras tutorial, we define a custom loss function:
 def vae_loss(x, x_decoded_mean):
     xent_loss = losses.binary_crossentropy(x, x_decoded_mean)
@@ -127,10 +134,41 @@ results = vae.fit(x_train, x_train,
         batch_size=batch_size,
         validation_data=(x_test, x_test))
 
-plt.plot(results.history['loss'])
-plt.plot(results.history['val_loss'])
-plt.title('Model loss\nInformation: Batch Size: {} |ID: {} |LD: {} |Optimizer: {}'.format(batch_size,intermediate_dim,latent_dim,OPTIMIZER))
-plt.ylabel('Loss')
-plt.xlabel('Epoch')
-plt.legend(['Train', 'Validation'], loc='upper right',fancybox=True,framealpha=1,shadow=True,borderpad=1)
-plt.show()
+def plotLoss():
+    plt.plot(results.history['loss'])
+    plt.plot(results.history['val_loss'])
+    plt.title('Model loss\nInformation: Batch Size: {} |ID: {} |LD: {} |Optimizer: {}'.format(batch_size,intermediate_dim,latent_dim,OPTIMIZER))
+    plt.ylabel('Loss')
+    plt.xlabel('Epoch')
+    plt.legend(['Train', 'Validation'], loc='upper right',fancybox=True,framealpha=1,shadow=True,borderpad=1)
+    plt.show()
+#encoded = encoder.predict(x_test)
+def applyTSNE(data):
+    tsne = TSNE(n_components=2, verbose=1, perplexity=25, n_iter=500)
+    #features = data.drop(['Label','attack_cat'],axis=1)
+
+    tsne_results = tsne.fit_transform(data)
+    target = cat.sample(frac=0.7)
+    df_subset = pd.DataFrame()
+    df_subset['tsne-2d-one'] = tsne_results[:,0]
+    df_subset['tsne-2d-two'] = tsne_results[:,1]
+    plt.figure(figsize=(16,10))
+    sns.scatterplot(
+        x="tsne-2d-one", y="tsne-2d-two",
+        hue=target,
+        palette=sns.color_palette("hls", len(target.unique().tolist())),
+        data=df_subset,
+        legend="full",
+        alpha=0.3
+    )
+    
+    plt.show()
+# applyTSNE(encoded) #apply TSNE to the laten dimension of the test or train dataset 
+# encoded = encoder.predict(x_test)
+model=Sequential(layers=encoder.layers)
+
+ynew = model.predict_classes(sam)
+# print(ynew)
+# yprob =encoder.predict(x)
+for i in range(10):
+    print ("Prediction is: {} and actual class is: {}".format(ynew[i],saml.iloc[i]))
